@@ -1,8 +1,8 @@
 import React, { useEffect, useRef } from 'react';
-import { getCoinSprite, getHeroSprite } from '../game/pixelSprites';
+import { getCoinSprite, getEnemySprite, getHeroSprite } from '../game/pixelSprites';
 
 interface PixelSpriteThumbProps {
-  kind: 'hero' | 'coin';
+  kind: 'hero' | 'enemy' | 'coin';
   id?: string;
   size?: number;
   className?: string;
@@ -19,7 +19,12 @@ export const PixelSpriteThumb: React.FC<PixelSpriteThumbProps> = ({
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
-    const sprite = kind === 'coin' ? getCoinSprite() : getHeroSprite(id);
+    const sprite =
+      kind === 'coin'
+        ? getCoinSprite()
+        : kind === 'enemy'
+        ? getEnemySprite(id)
+        : getHeroSprite(id);
     canvas.width = sprite.width;
     canvas.height = sprite.height;
     const ctx = canvas.getContext('2d');

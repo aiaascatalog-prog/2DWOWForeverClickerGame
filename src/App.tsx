@@ -361,6 +361,15 @@ export default function App() {
     return () => clearTimeout(id);
   }, [toastTitle]);
 
+  // Pause Web Audio automatically when tab/iframe loses visibility (CrazyGames / Y8 QA)
+  useEffect(() => {
+    const handleVisibility = () => {
+      soundEngine.setAdPaused(document.hidden);
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
   // Buff & Skill cooldown tick (10Hz)
   useEffect(() => {
     if (screen !== 'playing' || adModal || offlinePending || showHelp) return;
@@ -394,6 +403,16 @@ export default function App() {
     soundEngine.playUpgrade();
     platformSDK.gameplayStart();
   }, []);
+
+  const openHelp = useCallback(() => {
+    setShowHelp(true);
+    if (screen === 'playing') platformSDK.gameplayStop();
+  }, [screen]);
+
+  const closeHelp = useCallback(() => {
+    setShowHelp(false);
+    if (screen === 'playing') platformSDK.gameplayStart();
+  }, [screen]);
 
   const togglePause = useCallback(() => {
     setScreen((prev) => {
@@ -791,8 +810,12 @@ export default function App() {
     ? Math.max(0, Math.min(100, ((bossSecondsLeft ?? BOSS_TIMER_SEC) / (BOSS_TIMER_SEC + stats.bossTimerBonusSec)) * 100))
     : Math.min(100, (save.killsOnFloor / MONSTERS_PER_FLOOR) * 100);
 
+  const hasSavedProgress = save.totalKills > 0 || save.floor > 1 || save.ascensionCount > 0;
+  const activeRaceDef = getRaceById(save.activeRace);
+
   return (
     <div
+      onContextMenu={(e) => e.preventDefault()}
       className={`relative w-screen h-screen overflow-hidden bg-[#0e1017] text-slate-100 select-none ${
         isTrailerMode ? '[&_*]:!cursor-none !cursor-none' : ''
       }`}
@@ -821,44 +844,119 @@ export default function App() {
         onBossTimerUpdate={setBossSecondsLeft}
       />
 
-      {/* TITLE SCREEN */}
+      {/* START GAME SCREEN */}
       {screen === 'title' && (
-        <div className="fixed inset-0 z-30 flex flex-col items-center justify-center p-6 bg-black/60 backdrop-blur-[2px]">
-          <div className="absolute top-4 right-4 flex items-center gap-2">
+        <div className="fixed inset-0 z-30 flex flex-col items-center justify-center p-4 sm:p-6 bg-gradient-to-b from-[#090b10]/75 via-[#0b0e16]/55 to-[#090b10]/90">
+          {/* Top-right Audio & Language Controls */}
+          <div className="absolute top-3 right-3 sm:top-5 sm:right-5 flex items-center gap-2">
+            <button
+              onClick={toggleMute}
+              aria-label={muted ? 'Unmute audio' : 'Mute audio'}
+              className="pixel-card min-h-[40px] px-3 py-2 rounded-lg flex items-center gap-1.5 text-xs font-bold text-slate-200 hover:brightness-115 cursor-pointer"
+            >
+              {muted ? (
+                <VolumeX className="w-4 h-4 text-rose-400" />
+              ) : (
+                <Volume2 className="w-4 h-4 text-emerald-400" />
+              )}
+              <span className="hidden sm:inline">{muted ? 'Muted' : 'Sound'}</span>
+            </button>
             <button
               onClick={cycleLocale}
-              className="pixel-card px-3 py-2 rounded-lg flex items-center gap-1.5 text-xs font-bold text-amber-300 hover:brightness-110 cursor-pointer"
+              className="pixel-card min-h-[40px] px-3 py-2 rounded-lg flex items-center gap-1.5 text-xs font-bold text-amber-300 hover:brightness-115 cursor-pointer"
             >
               <Globe className="w-4 h-4" />
               {locale === 'en' ? 'EN' : locale === 'zh-TW' ? '繁中' : '简中'}
             </button>
           </div>
 
-          <div className="pixel-panel rounded-2xl p-6 sm:p-8 max-w-md w-full flex flex-col items-center text-center gap-5">
-            <div className="flex items-center gap-3">
-              <PixelSpriteThumb kind="hero" id="warrior" size={52} />
-              <PixelSpriteThumb kind="hero" id="shaman" size={52} />
-              <PixelSpriteThumb kind="hero" id="druid" size={52} />
-              <PixelSpriteThumb kind="hero" id="priest" size={52} />
+          <div className="pixel-panel rounded-2xl p-5 sm:p-7 max-w-xl w-full max-h-[92vh] overflow-y-auto custom-scroll flex flex-col items-center text-center gap-4 sm:gap-5">
+            {/* Pixel Hero Party vs Raid Dragon Showcase */}
+            <div className="w-full rounded-xl bg-gradient-to-b from-[#171c2b] to-[#10131e] border-2 border-[#2d344a] px-3 py-3 sm:py-4 flex items-center justify-between gap-2 overflow-hidden">
+              <div className="flex items-end gap-1.5 sm:gap-2.5">
+                <PixelSpriteThumb kind="hero" id="warrior" size={46} />
+                <PixelSpriteThumb kind="hero" id="paladin" size={46} />
+                <PixelSpriteThumb kind="hero" id="mage" size={46} />
+                <div className="hidden sm:block">
+                  <PixelSpriteThumb kind="hero" id="shaman" size={44} />
+                </div>
+                <div className="hidden sm:block">
+                  <PixelSpriteThumb kind="hero" id="druid" size={44} />
+                </div>
+              </div>
+              <div className="font-pixel text-sm sm:text-base font-bold text-amber-400/90 px-1 shrink-0">
+                VS
+              </div>
+              <div className="flex items-end gap-1.5">
+                <PixelSpriteThumb kind="enemy" id="anomaly" size={44} />
+                <PixelSpriteThumb kind="enemy" id="onyxia" size={56} />
+              </div>
             </div>
 
-            <div>
-              <h1 className="font-pixel text-3xl sm:text-4xl font-bold text-amber-300 tracking-wide pixel-text-shadow">
+            {/* Title Lockup */}
+            <div className="flex flex-col items-center gap-1">
+              <h1 className="font-pixel text-3xl sm:text-5xl font-bold text-amber-300 tracking-wide leading-none pixel-text-shadow">
                 {t.gameTitle}
               </h1>
-              <p className="font-pixel text-sm text-sky-300 tracking-widest mt-1">
+              <div className="font-pixel text-base sm:text-xl font-bold text-sky-300 tracking-[0.18em] pixel-text-shadow">
+                {t.gameTitleEdition}
+              </div>
+              <p className="text-xs sm:text-sm font-medium text-slate-300 mt-1">
                 {t.subtitle}
               </p>
             </div>
 
-            <button
-              onClick={enterGame}
-              className="pixel-btn-gold w-full py-3.5 rounded-xl font-pixel text-xl font-bold text-slate-950 tracking-wide cursor-pointer"
-            >
-              {t.playCta}
-            </button>
+            {/* Returning Player Progress Strip OR New Adventurer Feature Highlights */}
+            {hasSavedProgress ? (
+              <div className="w-full pixel-card rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-left">
+                <div>
+                  <div className="text-[11px] font-semibold text-slate-400">
+                    {activeRaceDef.name[locale]} · {activeHeroDef.name[locale]}
+                  </div>
+                  <div className="font-pixel text-base sm:text-lg font-bold text-white">
+                    {locale === 'en' ? `Floor ${save.floor}` : `第 ${save.floor} 層`} ·{' '}
+                    <span className="text-sky-300">{currentZone.name[locale]}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 font-pixel text-lg font-bold text-amber-300 font-mono-num">
+                  <PixelIcon name="coin" size={20} />
+                  {formatNumber(save.gold)}
+                </div>
+              </div>
+            ) : (
+              <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-2 text-left">
+                {t.startFeatures.map((feat, idx) => (
+                  <div key={idx} className="pixel-card rounded-xl p-2.5 sm:p-3 flex flex-col gap-0.5">
+                    <div className="font-pixel text-sm font-bold text-amber-300 leading-tight">
+                      {feat.title}
+                    </div>
+                    <div className="text-[11px] text-slate-300 leading-snug">{feat.desc}</div>
+                  </div>
+                ))}
+              </div>
+            )}
 
-            <p className="text-xs text-slate-300 leading-relaxed">{t.controlsHint}</p>
+            {/* Primary & Secondary Actions */}
+            <div className="w-full flex flex-col sm:flex-row items-stretch gap-2.5">
+              <button
+                onClick={enterGame}
+                className="pixel-btn-gold flex-1 min-h-[48px] py-3 px-6 rounded-xl font-pixel text-xl font-bold text-slate-950 tracking-wide flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Play className="w-5 h-5 fill-slate-950" />
+                <span>{hasSavedProgress ? t.continueCta : t.playCta}</span>
+              </button>
+              <button
+                onClick={openHelp}
+                className="pixel-btn-slate min-h-[48px] py-3 px-5 rounded-xl font-pixel text-base font-bold text-slate-100 flex items-center justify-center gap-2 hover:brightness-110 cursor-pointer shrink-0"
+              >
+                <PixelIcon name="help" size={18} />
+                <span>{t.howToPlayCta}</span>
+              </button>
+            </div>
+
+            <p className="text-[11px] sm:text-xs text-slate-400 leading-relaxed">
+              {t.controlsHint}
+            </p>
           </div>
         </div>
       )}
@@ -938,7 +1036,7 @@ export default function App() {
                   <PixelIcon name="gear" size={24} />
                 </button>
                 <button
-                  onClick={() => setShowHelp(true)}
+                  onClick={openHelp}
                   aria-label="Help"
                   className="pixel-card w-11 h-11 rounded-xl flex items-center justify-center hover:brightness-115 cursor-pointer"
                 >
@@ -1640,7 +1738,7 @@ export default function App() {
               ))}
             </ul>
             <button
-              onClick={() => setShowHelp(false)}
+              onClick={closeHelp}
               className="pixel-btn-gold w-full py-2.5 rounded-xl font-pixel text-base font-bold text-slate-950 cursor-pointer"
             >
               {t.close}

@@ -16,13 +16,13 @@ on:
 
 jobs:
   generate-media:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
 
@@ -117,7 +117,7 @@ jobs:
 
       - name: Upload Y8 Media Pack Artifact
         if: ${{ inputs.platform == 'all' || inputs.platform == 'y8' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: y8-media-pack
           path: media-output/y8/
@@ -125,7 +125,7 @@ jobs:
 
       - name: Upload CrazyGames Media Pack Artifact
         if: ${{ inputs.platform == 'all' || inputs.platform == 'crazygames' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: crazygames-media-pack
           path: media-output/crazygames/
@@ -133,7 +133,7 @@ jobs:
 
       - name: Upload Social Shorts Artifact
         if: ${{ inputs.platform == 'all' || inputs.platform == 'social' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: social-shorts-pack
           path: media-output/social/

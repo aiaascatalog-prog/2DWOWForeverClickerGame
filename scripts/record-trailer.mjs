@@ -73,19 +73,51 @@ async function createSeededContext(browser, width, height, videoDir) {
 
   await page.addInitScript(() => {
     const seedSave = {
-      tokens: 260,
-      lifetimeTokens: 3200,
-      totalClicks: 42,
-      bugsZapped: 1,
-      vcCaught: 1,
-      ipoShares: 0,
-      prestigeCount: 0,
-      upgrades: { auto_script: 4, gpu_rack: 2 },
-      research: [],
-      achievements: ['first_mint'],
+      gold: 4850,
+      lifetimeGold: 28500,
+      floor: 15,
+      maxFloor: 15,
+      killsOnFloor: 4,
+      totalKills: 94,
+      raresSlain: 4,
+      bossesSlain: 2,
+      totalClicks: 65,
+      totalCrits: 14,
+      soulShards: 6,
+      emblems: 1,
+      ascensionCount: 0,
+      activeHero: 'paladin',
+      activeRace: 'skyborne_alliance',
+      unlockedHeroes: ['warrior', 'hunter', 'priest', 'mage', 'rogue', 'shaman', 'paladin'],
+      heroRanks: {
+        warrior: 3,
+        paladin: 2,
+        hunter: 2,
+        rogue: 1,
+        priest: 2,
+        shaman: 2,
+        mage: 2,
+        warlock: 1,
+        druid: 1,
+      },
+      upgrades: {
+        sharp_blade: 16,
+        auto_attack: 12,
+        fury: 3,
+        greed: 3,
+        crit_luck: 5,
+        titan_grip: 1,
+      },
+      skillLevels: {
+        frenzy: 2,
+        gold_rush: 2,
+        smite: 2,
+      },
+      relics: { warchief_totem: 1 },
+      claimedQuests: ['first_blood'],
       lastSavedAt: Date.now(),
     };
-    localStorage.setItem('ai_startup_sim_save_v2', JSON.stringify(seedSave));
+    localStorage.setItem('wow_forever_dungeon_clicker_v2', JSON.stringify(seedSave));
   });
 
   await page.goto(TARGET_URL, { waitUntil: 'networkidle' });
@@ -102,25 +134,20 @@ async function recordSpec(browser, specKey) {
 
   const { context, page } = await createSeededContext(browser, spec.width, spec.height, rawDir);
 
-  const isDesktop = spec.width >= 900;
-  const coreX = Math.round(isDesktop ? spec.width * 0.36 : spec.width * 0.5);
-  const coreY = Math.round(isDesktop ? spec.height * 0.52 : spec.height * 0.42);
+  const isDesktop = spec.width >= 920;
+  const arenaW = isDesktop ? Math.max(460, spec.width - 430) : spec.width;
+  const arenaH = isDesktop ? spec.height : Math.max(300, spec.height * 0.52);
+  const enemyX = Math.round(arenaW * 0.65);
+  const enemyY = Math.round(arenaH * 0.72);
 
-  // Phase 1 (~7.5s): Active core clicking, particle bursts, buying upgrades
+  // Phase 1 (~7.5s): Active dungeon clicks + Space strikes
   for (let i = 0; i < 62; i++) {
     if (i % 2 === 0) {
-      await page.mouse.click(coreX + (Math.random() - 0.5) * 20, coreY + (Math.random() - 0.5) * 20);
+      await page.mouse.click(enemyX + (Math.random() - 0.5) * 40, enemyY + (Math.random() - 0.5) * 24);
     } else {
       await page.keyboard.press('Space');
     }
-    if (i === 18) {
-      await page.keyboard.press('1');
-    }
-    if (i === 32) {
-      await page.keyboard.press('2');
-    }
     if (i === 48) {
-      await page.keyboard.press('1');
       const normalShot = spec.screenshots.find((s) => s.atStep === 'normal');
       if (normalShot) {
         await page.screenshot({ path: path.join(platformDir, normalShot.name) });
@@ -129,19 +156,20 @@ async function recordSpec(browser, specKey) {
     await sleep(115);
   }
 
-  // Phase 2 (~10.5s): Activate 10x Golden Fever Mode and showcase exponential growth!
-  await page.keyboard.press('f');
-  await sleep(200);
+  // Phase 2 (~10.5s): Trigger Bloodlust (1), Gold Rush (2), and Lightning Smite (3)
+  await page.keyboard.press('1');
+  await sleep(120);
+  await page.keyboard.press('2');
+  await sleep(120);
+  await page.keyboard.press('3');
+  await sleep(150);
 
   for (let i = 0; i < 84; i++) {
     if (i % 2 === 0) {
-      await page.mouse.click(coreX + (Math.random() - 0.5) * 26, coreY + (Math.random() - 0.5) * 26);
+      await page.mouse.click(enemyX + (Math.random() - 0.5) * 50, enemyY + (Math.random() - 0.5) * 28);
     } else {
       await page.keyboard.press('Space');
     }
-    if (i % 10 === 9) await page.keyboard.press('1');
-    if (i % 16 === 15) await page.keyboard.press('2');
-    if (i % 28 === 27) await page.keyboard.press('3');
     if (i === 36) {
       const feverShot = spec.screenshots.find((s) => s.atStep === 'fever');
       if (feverShot) {
@@ -165,10 +193,13 @@ async function captureY8StandardScreenshot(browser) {
   const y8Dir = path.join(OUTPUT_DIR, 'y8');
   fs.mkdirSync(y8Dir, { recursive: true });
   const { context, page } = await createSeededContext(browser, 760, 570, null);
-  const coreX = Math.round(760 * 0.5);
-  const coreY = Math.round(570 * 0.42);
+  const arenaW = 760;
+  const arenaH = Math.max(300, 570 * 0.52);
+  const enemyX = Math.round(arenaW * 0.65);
+  const enemyY = Math.round(arenaH * 0.72);
+  await page.keyboard.press('1');
   for (let i = 0; i < 8; i++) {
-    await page.mouse.click(coreX, coreY);
+    await page.mouse.click(enemyX, enemyY);
     await sleep(90);
   }
   await page.screenshot({ path: path.join(y8Dir, 'y8-screenshot-standard-760x570.png') });

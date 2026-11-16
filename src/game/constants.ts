@@ -825,9 +825,13 @@ export const UI_COPY: Record<
   Locale,
   {
     gameTitle: string;
+    gameTitleEdition: string;
     subtitle: string;
     playCta: string;
+    continueCta: string;
+    howToPlayCta: string;
     controlsHint: string;
+    startFeatures: { title: string; desc: string }[];
     boostBtn: string;
     boostSub: string;
     boostActive: string;
@@ -878,10 +882,18 @@ export const UI_COPY: Record<
   }
 > = {
   en: {
-    gameTitle: 'WOW: FOREVER CLICKER',
-    subtitle: '9 CLASSES · 9 RACES · 9 DUNGEONS · 3 RAIDS',
-    playCta: 'ENTER AZEROTH',
-    controlsHint: 'Click / Space: Attack · 1-3: Cast Skills · Switch 9 Classes & Forever Races · Slay Rare Elites & Raid Bosses',
+    gameTitle: 'WORLD OF DUNGEONS',
+    gameTitleEdition: 'FOREVER CLICKER',
+    subtitle: '9 Classes · 9 Races · 9 Dungeons · 3 Launch Raids',
+    playCta: 'Start Game',
+    continueCta: 'Continue Quest',
+    howToPlayCta: 'How to Play',
+    controlsHint: 'Click / Space: Strike · Keys 1–3: Cast Skills · Esc: Pause & Audio',
+    startFeatures: [
+      { title: '9 Classes & 9 Races', desc: 'Build combos with Dual-Faction Skyborne & class auras' },
+      { title: '13 Dungeons & Raids', desc: 'Conquer Zephras Isle up to Onyxia’s Lair & Hyjal Summit' },
+      { title: 'Rare Elites & Relics', desc: 'Hunt silver & gold Rares for Soul Shards & Ascend' },
+    ],
     boostBtn: '2X DAMAGE',
     boostSub: 'watch a short ad',
     boostActive: '2X ACTIVE',
@@ -913,10 +925,10 @@ export const UI_COPY: Record<
     emblemBonus: 'Emblem Bonus',
     onboardingHint: 'Tap an enemy or press SPACE to strike!',
     pausedTitle: 'SETTINGS & PAUSE',
-    helpTitle: 'WOW: FOREVER GUIDE',
+    helpTitle: 'ADVENTURER GUIDE',
     helpLines: [
-      'Play all 9 WoW: Forever Classes (Warrior, Hunter, Priest, Mage, Rogue, Shaman, Paladin, Druid, Warlock) and choose from 9 Races including Dual-Faction Skyborne!',
-      'Progress from Zephras Isle through all 9 new Dungeons (Hall of Thanes, Ruins of Lordaeron, City of Dalaran, Shaper\'s Terrace) into the 3 Launch Raids (Barrow Deeps, Hyjal Summit, Onyxia\'s Lair).',
+      'Play all 9 Classes (Warrior, Hunter, Priest, Mage, Rogue, Shaman, Paladin, Druid, Warlock) and choose from 9 Races including Dual-Faction Skyborne!',
+      'Progress from Zephras Isle through all 9 Dungeons (Hall of Thanes, Ruins of Lordaeron, City of Dalaran, Shaper\'s Terrace) into the 3 Launch Raids (Barrow Deeps, Hyjal Summit, Onyxia\'s Lair).',
       'Watch for silver/gold RARE and RARE ELITE spawns (like Fernfeather, Victor the Vile, Lynn the Ignored, Broodmother Valraxx) for bonus Gold & Soul Shards.',
       'Cast active Skills using the round buttons or keys 1, 2, 3.',
       'Ascend at Floor 10+ to earn permanent Heroic Emblems.',
@@ -938,10 +950,18 @@ export const UI_COPY: Record<
     dpsShort: 'DPS',
   },
   'zh-TW': {
-    gameTitle: '魔獸永恆：地城點擊',
+    gameTitle: '地下城世界',
+    gameTitleEdition: '永恆點擊 · FOREVER CLICKER',
     subtitle: '9 大職業 · 9 大種族 · 9 新副本 · 3 大團本',
-    playCta: '進入艾澤拉斯',
-    controlsHint: '點擊怪物 / 空白鍵攻擊 · 1-3 施放技能 · 切換九大職業與天裔雙陣營種族',
+    playCta: '開始冒險',
+    continueCta: '繼續征戰',
+    howToPlayCta: '遊戲說明',
+    controlsHint: '點擊怪物 / 空白鍵攻擊 · 按鍵 1–3 施放技能 · Esc 暫停與音效',
+    startFeatures: [
+      { title: '九大職業與種族', desc: '自由搭配雙陣營天裔與九大職業光環' },
+      { title: '十三大副本與團本', desc: '從澤弗拉斯一路攻略至奧妮克希亞巢穴' },
+      { title: '稀有精英與飛昇', desc: '狩獵稀有怪掉落靈魂碎片鍛造聖物' },
+    ],
     boostBtn: '2倍傷害',
     boostSub: '觀看短廣告',
     boostActive: '2倍增幅中',
@@ -972,7 +992,7 @@ export const UI_COPY: Record<
     emblemBonus: '徽記加成',
     onboardingHint: '點擊怪物或按 SPACE 展開攻擊！',
     pausedTitle: '設定與暫停',
-    helpTitle: '魔獸永恆冒險指南',
+    helpTitle: '冒險者指南',
     helpLines: [
       '解鎖全部 9 大職業（戰士、獵人、牧師、法師、盜賊、薩滿、聖騎士、德魯伊、術士）並搭配 9 大種族（含雙陣營天裔）天賦！',
       '從澤弗拉斯之島出發，攻略 9 大全新副本與 3 大團隊副本（獸穴深處、海加爾山巔、奧妮克希亞巢穴）。',
@@ -997,10 +1017,18 @@ export const UI_COPY: Record<
     dpsShort: '秒傷',
   },
   'zh-CN': {
-    gameTitle: '魔兽永恒：地下城点击',
+    gameTitle: '地下城世界',
+    gameTitleEdition: '永恒点击 · FOREVER CLICKER',
     subtitle: '9 大职业 · 9 大种族 · 9 新副本 · 3 大团本',
-    playCta: '进入艾泽拉斯',
-    controlsHint: '点击怪物 / 空格键攻击 · 1-3 施放技能 · 切换九大职业与天裔双阵营种族',
+    playCta: '开始冒险',
+    continueCta: '继续征战',
+    howToPlayCta: '玩法说明',
+    controlsHint: '点击怪物 / 空格键攻击 · 按键 1–3 施放技能 · Esc 暂停与音效',
+    startFeatures: [
+      { title: '九大职业与种族', desc: '自由搭配双阵营天裔与九大职业光环' },
+      { title: '十三大副本与团本', desc: '从泽弗拉斯一路攻略至奥妮克希亚巢穴' },
+      { title: '稀有精英与飞升', desc: '狩猎稀有怪掉落灵魂碎片锻造圣物' },
+    ],
     boostBtn: '2倍伤害',
     boostSub: '观看短广告',
     boostActive: '2倍增幅中',
@@ -1031,7 +1059,7 @@ export const UI_COPY: Record<
     emblemBonus: '徽记加成',
     onboardingHint: '点击怪物或按 SPACE 展开攻击！',
     pausedTitle: '设置与暂停',
-    helpTitle: '魔兽永恒冒险指南',
+    helpTitle: '冒险者指南',
     helpLines: [
       '解锁全部 9 大职业（战士、猎人、牧师、法师、潜行者、萨满、圣骑士、德鲁伊、术士）并搭配 9 大种族（含双阵营天裔）天赋！',
       '从泽弗拉斯之岛出发，攻略 9 大全新副本与 3 大团队副本（兽穴深处、海加尔山巅、奥妮克希亚巢穴）。',
