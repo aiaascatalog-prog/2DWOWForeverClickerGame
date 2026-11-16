@@ -1,0 +1,195 @@
+class SoundEngine {
+  private ctx: AudioContext | null = null;
+  private muted: boolean = false;
+  private adPaused: boolean = false;
+
+  private ensureContext(): AudioContext | null {
+    if (this.muted || this.adPaused) return null;
+    if (!this.ctx && typeof window !== 'undefined') {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (AudioCtx) {
+        this.ctx = new AudioCtx();
+      }
+    }
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
+    }
+    return this.ctx;
+  }
+
+  public setMuted(muted: boolean) {
+    this.muted = muted;
+  }
+
+  public isMuted(): boolean {
+    return this.muted;
+  }
+
+  public setAdPaused(paused: boolean) {
+    this.adPaused = paused;
+  }
+
+  public playClick(isCrit = false, combo = 0) {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    const baseFreq = isCrit ? 480 : 190 + Math.min(combo * 10, 160);
+    osc.type = isCrit ? 'sawtooth' : 'triangle';
+    osc.frequency.setValueAtTime(baseFreq * 1.4, now);
+    osc.frequency.exponentialRampToValueAtTime(isCrit ? 120 : 85, now + (isCrit ? 0.11 : 0.065));
+
+    gain.gain.setValueAtTime(isCrit ? 0.13 : 0.08, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + (isCrit ? 0.12 : 0.07));
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + (isCrit ? 0.13 : 0.08));
+  }
+
+  public playEnemyDefeat(isBoss = false) {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const notes = isBoss ? [330, 440, 554.37, 659.25, 880] : [783.99, 1046.5];
+    notes.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = isBoss ? 'triangle' : 'sine';
+      osc.frequency.setValueAtTime(freq, now + idx * 0.045);
+
+      gain.gain.setValueAtTime(isBoss ? 0.12 : 0.07, now + idx * 0.045);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.045 + (isBoss ? 0.28 : 0.14));
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + idx * 0.045);
+      osc.stop(now + idx * 0.045 + (isBoss ? 0.3 : 0.15));
+    });
+  }
+
+  public playSkillCast() {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const freqs = [293.66, 440, 587.33, 880];
+    freqs.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(freq, now + i * 0.04);
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.2, now + i * 0.04 + 0.18);
+
+      gain.gain.setValueAtTime(0.065, now + i * 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.04 + 0.22);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + i * 0.04);
+      osc.stop(now + i * 0.04 + 0.24);
+    });
+  }
+
+  public playUpgrade() {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const notes = [440, 554.37, 659.25];
+    notes.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + idx * 0.04);
+
+      gain.gain.setValueAtTime(0.001, now + idx * 0.04);
+      gain.gain.linearRampToValueAtTime(0.09, now + idx * 0.04 + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.04 + 0.14);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + idx * 0.04);
+      osc.stop(now + idx * 0.04 + 0.15);
+    });
+  }
+
+  public playFeverStart() {
+    this.playSkillCast();
+  }
+
+  public playGoldenCatch() {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const notes = [587.33, 783.99, 987.77, 1174.66];
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + i * 0.04);
+
+      gain.gain.setValueAtTime(0.11, now + i * 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.04 + 0.22);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + i * 0.04);
+      osc.stop(now + i * 0.04 + 0.24);
+    });
+  }
+
+  public playAchievement() {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const notes = [523.25, 659.25, 783.99, 1046.5];
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + i * 0.055);
+
+      gain.gain.setValueAtTime(0.1, now + i * 0.055);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.055 + 0.25);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + i * 0.055);
+      osc.stop(now + i * 0.055 + 0.26);
+    });
+  }
+
+  public playPrestige() {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const notes = [261.63, 329.63, 392.0, 523.25, 659.25, 783.99, 1046.5];
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + i * 0.06);
+
+      gain.gain.setValueAtTime(0.12, now + i * 0.06);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.35);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + i * 0.06);
+      osc.stop(now + i * 0.06 + 0.36);
+    });
+  }
+}
+
+export const soundEngine = new SoundEngine();

@@ -1,0 +1,84 @@
+name: Build Game Release & Deploy
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: TypeScript type check
+        run: npx tsc --noEmit
+
+      - name: Build generic static bundle (Y8 / GamePix / KUMODeck / Pages)
+        run: npm run build
+
+      - name: Package game-portal-release.zip (Zero external SDK)
+        working-directory: dist
+        run: zip -r ../game-portal-release.zip .
+
+      - name: Build CrazyGames SDK v3 bundle & package crazygames-release.zip
+        env:
+          VITE_PORTAL: crazygames
+        run: |
+          rm -rf dist-cg
+          npx vite build --outDir dist-cg
+          (cd dist-cg && zip -r ../crazygames-release.zip .)
+
+      - name: Upload game-portal-release.zip Artifact (Y8 / GamePix / KUMODeck)
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-portal-release
+          path: game-portal-release.zip
+          retention-days: 30
+
+      - name: Upload crazygames-release.zip Artifact (With CrazyGames SDK v3)
+        uses: actions/upload-artifact@v4
+        with:
+          name: crazygames-release
+          path: crazygames-release.zip
+          retention-days: 30
+
+      - name: Upload GitHub Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy to CrazyGames (if CRAZYGAMES_TOKEN is set)
+        env:
+          CRAZYGAMES_TOKEN: ${{ secrets.CRAZYGAMES_TOKEN }}
+        run: |
+          if [ -n "$CRAZYGAMES_TOKEN" ]; then
+            npx @crazygames/sdk-cli upload --token "$CRAZYGAMES_TOKEN" --file crazygames-release.zip
+          else
+            echo "CRAZYGAMES_TOKEN not set, skipping CrazyGames upload."
+          fi
+
+  deploy-pages:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
