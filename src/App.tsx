@@ -2,16 +2,20 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ChevronLeft,
   ChevronRight,
+  Coins,
   Globe,
+  Lock,
   Play,
   RotateCcw,
+  Shield,
   Sparkles,
   Volume2,
   VolumeX,
+  Zap,
 } from 'lucide-react';
 import { soundEngine } from './audio/synth';
-import { GameCanvas, GameCanvasHandle } from './components/GameCanvas';
-import { PixelIcon, PixelIconName, PixelSpriteThumb } from './components/PixelIcon';
+import { ClassSkillTimerState, GameCanvas, GameCanvasHandle } from './components/GameCanvas';
+import { PixelIcon, PixelIconName, PixelSpriteThumb, SkillPixelIcon } from './components/PixelIcon';
 import {
   ASCENSION_MIN_FLOOR,
   BOSS_TIMER_SEC,
@@ -22,6 +26,7 @@ import {
   LOCALE_STORAGE_KEY,
   MONSTERS_PER_FLOOR,
   QUESTS,
+  RACES,
   RELICS,
   SAVE_KEY,
   SKILLS,
@@ -30,11 +35,16 @@ import {
   calculatePendingEmblems,
   detectDefaultLocale,
   formatNumber,
+  getArenaLayout,
+  getBulkGenericCostQuote,
   getBulkUpgradeQuote,
+  getClassAttackLevel,
+  getClassSkillLevel,
+  getClassSwitchCost,
+  getClassUnlockCost,
   getHeroRank,
   getHeroUpgradeCost,
   getRaceById,
-  getRacesForClass,
   getRelicCost,
   getSkillLevel,
   getSkillMetrics,
@@ -67,10 +77,27 @@ const DEFAULT_HERO_RANKS: Record<HeroId, number> = {
   druid: 1,
 };
 
+const DEFAULT_CLASS_ATTACK_LEVELS: Record<HeroId, number> = {
+  warrior: 1,
+  paladin: 1,
+  hunter: 1,
+  rogue: 1,
+  priest: 1,
+  shaman: 1,
+  mage: 1,
+  warlock: 1,
+  druid: 1,
+};
+
+const DEFAULT_CLASS_SKILL_LEVELS: Record<string, number> = Object.fromEntries(
+  HEROES.flatMap((h) => h.autoSkills.map((sk) => [sk.id, 1]))
+);
+
 function createFreshSave(overrides: Partial<SaveState> = {}): SaveState {
   return {
     gold: 0,
     lifetimeGold: 0,
+    stolenGoldBank: 0,
     floor: 1,
     maxFloor: 1,
     killsOnFloor: 0,
@@ -84,9 +111,12 @@ function createFreshSave(overrides: Partial<SaveState> = {}): SaveState {
     ascensionCount: 0,
     activeHero: 'warrior',
     activeRace: 'human',
+    raceLocked: false,
     unlockedHeroes: ['warrior'],
     heroRanks: { ...DEFAULT_HERO_RANKS },
-    upgrades: { sharp_blade: 1 },
+    classAttackLevels: { ...DEFAULT_CLASS_ATTACK_LEVELS },
+    classSkillLevels: { ...DEFAULT_CLASS_SKILL_LEVELS },
+    upgrades: {},
     skillLevels: {
       frenzy: 0,
       gold_rush: 0,
@@ -105,8 +135,42 @@ function loadLocalSave(): SaveState {
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<SaveState>;
       if (typeof parsed.gold === 'number') {
+        const activeHero: HeroId = parsed.activeHero ?? 'warrior';
+        const activeDef = HEROES.find((h) => h.id === activeHero) || HEROES[0];
+        const legacyBladeLv = parsed.upgrades?.sharp_blade ?? 1;
+        const legacyAutoLv = parsed.upgrades?.auto_attack ?? 0;
+
+        const classAttackLevels: Record<HeroId, number> = {
+          ...DEFAULT_CLASS_ATTACK_LEVELS,
+          ...(parsed.classAttackLevels ?? {}),
+        };
+        if (!parsed.classAttackLevels && legacyBladeLv > 1) {
+          classAttackLevels[activeHero] = legacyBladeLv;
+        }
+
+        const classSkillLevels: Record<string, number> = {
+          ...DEFAULT_CLASS_SKILL_LEVELS,
+          ...(parsed.classSkillLevels ?? {}),
+        };
+        if (!parsed.classSkillLevels && legacyAutoLv > 0) {
+          for (const sk of activeDef.autoSkills) {
+            classSkillLevels[sk.id] = 1 + legacyAutoLv;
+          }
+        }
+
+        const inferredRaceLocked =
+          typeof parsed.raceLocked === 'boolean'
+            ? parsed.raceLocked
+            : (parsed.totalKills ?? 0) > 0 ||
+              (parsed.floor ?? 1) > 1 ||
+              (parsed.totalClicks ?? 0) > 0 ||
+              (parsed.ascensionCount ?? 0) > 0;
+
         return createFreshSave({
           ...parsed,
+          activeHero,
+          raceLocked: inferredRaceLocked,
+          stolenGoldBank: typeof parsed.stolenGoldBank === 'number' ? parsed.stolenGoldBank : 0,
           unlockedHeroes:
             Array.isArray(parsed.unlockedHeroes) && parsed.unlockedHeroes.length > 0
               ? parsed.unlockedHeroes
@@ -115,7 +179,9 @@ function loadLocalSave(): SaveState {
             ...DEFAULT_HERO_RANKS,
             ...(parsed.heroRanks ?? {}),
           },
-          upgrades: parsed.upgrades ?? { sharp_blade: 1 },
+          classAttackLevels,
+          classSkillLevels,
+          upgrades: parsed.upgrades ?? {},
           skillLevels: {
             frenzy: 0,
             gold_rush: 0,
@@ -155,6 +221,10 @@ export default function App() {
   const [dockTab, setDockTab] = useState<DockTab>('upgrades');
   const [buyAmount, setBuyAmount] = useState<BuyAmount>(1);
   const [damage2xLeft, setDamage2xLeft] = useState(0);
+  const [coinWardLeft, setCoinWardLeft] = useState(0);
+  const [haste2xLeft, setHaste2xLeft] = useState(0);
+  const [bossSecondWindLeft, setBossSecondWindLeft] = useState(0);
+  const [classSkillTimers, setClassSkillTimers] = useState<ClassSkillTimerState[]>([]);
   const [skillActiveLeft, setSkillActiveLeft] = useState<Record<SkillId, number>>({
     frenzy: 0,
     gold_rush: 0,
@@ -171,7 +241,12 @@ export default function App() {
   const [offlinePending, setOfflinePending] = useState<number | null>(null);
   const [toastTitle, setToastTitle] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [viewport, setViewport] = useState<{ w: number; h: number }>(() => ({
+    w: typeof window !== 'undefined' ? window.innerWidth : 1280,
+    h: typeof window !== 'undefined' ? window.innerHeight : 720,
+  }));
 
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<GameCanvasHandle | null>(null);
   const comboRef = useRef(0);
   const lastClickRef = useRef(0);
@@ -180,22 +255,26 @@ export default function App() {
 
   const t = UI_COPY[locale];
 
+  const activeHeroDef = useMemo(
+    () => HEROES.find((h) => h.id === save.activeHero) || HEROES[0],
+    [save.activeHero]
+  );
+
   // Derived RPG Combat Stats
   const stats = useMemo(() => {
-    const bladeLv = save.upgrades.sharp_blade || 0;
-    const autoLv = save.upgrades.auto_attack || 0;
+    const primaryLv = getClassAttackLevel(save, save.activeHero);
     const furyLv = save.upgrades.fury || 0;
     const greedLv = save.upgrades.greed || 0;
     const critLv = save.upgrades.crit_luck || 0;
     const titanLv = save.upgrades.titan_grip || 0;
 
     // 25-level milestone multipliers
-    const bladeMilestone = Math.pow(2, Math.floor(bladeLv / 25));
-    const autoMilestone = Math.pow(2, Math.floor(autoLv / 25));
+    const primaryMilestone = Math.pow(2, Math.floor(primaryLv / 25));
     const titanMilestone = Math.pow(2, Math.floor(titanLv / 25));
 
-    let baseTap = 1 + bladeLv * 1.6 * bladeMilestone + titanLv * 32 * titanMilestone;
-    let baseDps = autoLv * 4 * autoMilestone + titanLv * 48 * titanMilestone;
+    const baseTap =
+      (1 + primaryLv * 1.8 * primaryMilestone + titanLv * 32 * titanMilestone) *
+      activeHeroDef.primaryAttack.powerMult;
 
     // Hero Class Aura (from active FIGHTING class among all 9 classes)
     const activeHeroRank = getHeroRank(save, save.activeHero);
@@ -266,7 +345,6 @@ export default function App() {
 
     const tapDamage =
       baseTap * heroTapMult * (1 + frostRank * 0.5) * allDmgMult * frenzyMult;
-    const dps = baseDps * heroDpsMult * (1 + kirinRank * 0.5) * allDmgMult;
 
     const critChance = Math.min(0.8, 0.05 + critLv * 0.03 + heroCritBonus);
     const critMultiplier = 5 + heroCritDmgBonus;
@@ -278,10 +356,42 @@ export default function App() {
       goldRushMult;
 
     const cdScale = Math.max(0.35, 1 - heartRank * 0.08);
+    const hasteMult = haste2xLeft > 0 ? 0.5 : 1;
+
+    // Independent scaling for each of the active class's 2 countdown skills
+    const computeSkillSlot = (idx: 0 | 1) => {
+      const sk = activeHeroDef.autoSkills[idx];
+      const skLv = getClassSkillLevel(save, sk.id);
+      const skMilestone = Math.pow(2, Math.floor(skLv / 25));
+      const baseSkPower = 3 + (skLv - 1) * 4.5 * skMilestone + titanLv * 48 * titanMilestone;
+      const power = baseSkPower * heroDpsMult * (1 + kirinRank * 0.5) * allDmgMult;
+      const lvCdBonus = Math.max(0.75, 1 - (skLv - 1) * 0.015);
+      const effCdScale = Math.max(0.25, cdScale * lvCdBonus * hasteMult);
+      return { power, effCdScale };
+    };
+
+    const slot0 = computeSkillSlot(0);
+    const slot1 = computeSkillSlot(1);
+    const skillPowers: [number, number] = [slot0.power, slot1.power];
+    const skillCdScales: [number, number] = [slot0.effCdScale, slot1.effCdScale];
+
+    const dps = ([0, 1] as const).reduce<number>((acc, idx) => {
+      const sk = activeHeroDef.autoSkills[idx];
+      const effMult = sk.aoe ? sk.damageMult * 2.1 : sk.damageMult;
+      const critEv =
+        sk.special === 'crit_guaranteed'
+          ? critMultiplier
+          : 1 + critChance * (critMultiplier - 1);
+      const avgHit = skillPowers[idx] * effMult * critEv;
+      return acc + avgHit / Math.max(0.4, sk.cooldownSec * skillCdScales[idx]);
+    }, 0);
+
     const bossTimerBonusSec = heartRank * 3;
 
     return {
       tapDamage,
+      skillPowers,
+      skillCdScales,
       dps,
       allDmgMult,
       critChance,
@@ -291,12 +401,7 @@ export default function App() {
       cdScale,
       bossTimerBonusSec,
     };
-  }, [save, damage2xLeft, skillActiveLeft.frenzy, skillActiveLeft.gold_rush]);
-
-  const activeHeroDef = useMemo(
-    () => HEROES.find((h) => h.id === save.activeHero) || HEROES[0],
-    [save.activeHero]
-  );
+  }, [save, activeHeroDef, damage2xLeft, haste2xLeft, skillActiveLeft.frenzy, skillActiveLeft.gold_rush]);
 
   const { zone: currentZone, tier: zoneTier } = useMemo(
     () => getZoneForFloor(save.floor),
@@ -375,6 +480,9 @@ export default function App() {
     if (screen !== 'playing' || adModal || offlinePending || showHelp) return;
     const id = setInterval(() => {
       setDamage2xLeft((prev) => (prev > 0 ? Math.max(0, prev - 0.1) : 0));
+      setCoinWardLeft((prev) => (prev > 0 ? Math.max(0, prev - 0.1) : 0));
+      setHaste2xLeft((prev) => (prev > 0 ? Math.max(0, prev - 0.1) : 0));
+      setBossSecondWindLeft((prev) => (prev > 0 ? Math.max(0, prev - 0.1) : 0));
       setSkillActiveLeft((prev) => ({
         frenzy: prev.frenzy > 0 ? Math.max(0, prev.frenzy - 0.1) : 0,
         gold_rush: prev.gold_rush > 0 ? Math.max(0, prev.gold_rush - 0.1) : 0,
@@ -398,11 +506,34 @@ export default function App() {
     return () => clearTimeout(id);
   }, [adModal]);
 
+  // Sync viewport size with root container (CrazyGames QA iframe, mobile rotation, fullscreen)
+  useEffect(() => {
+    const updateSize = () => {
+      const el = rootRef.current;
+      const w = el && el.clientWidth > 0 ? el.clientWidth : window.innerWidth;
+      const h = el && el.clientHeight > 0 ? el.clientHeight : window.innerHeight;
+      setViewport((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
+    };
+    updateSize();
+    window.addEventListener('resize', updateSize);
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(updateSize) : null;
+    if (rootRef.current) ro?.observe(rootRef.current);
+    return () => {
+      window.removeEventListener('resize', updateSize);
+      ro?.disconnect();
+    };
+  }, []);
+
   const enterGame = useCallback(() => {
+    setSave((prev) => (prev.raceLocked ? prev : { ...prev, raceLocked: true }));
     setScreen('playing');
     soundEngine.playUpgrade();
-    platformSDK.gameplayStart();
-  }, []);
+    if (offlinePending === null) {
+      platformSDK.gameplayStart();
+    } else {
+      platformSDK.gameplayStop();
+    }
+  }, [offlinePending]);
 
   const openHelp = useCallback(() => {
     setShowHelp(true);
@@ -446,6 +577,9 @@ export default function App() {
     if (isBoss || isRare) {
       platformSDK.happytime();
     }
+    if (isBoss) {
+      setBossSecondWindLeft(0);
+    }
 
     setSave((prev) => {
       const nextKillsOnFloor = prev.killsOnFloor + 1;
@@ -475,6 +609,55 @@ export default function App() {
     });
   }, []);
 
+  const handleEnemyCounterAttack = useCallback(
+    (stealRatio: number, enemyName: string, isBoss: boolean) => {
+      setSave((prev) => {
+        const lost = prev.gold > 0 ? Math.max(1, Math.floor(prev.gold * stealRatio)) : 0;
+        if (lost > 0) {
+          canvasRef.current?.spawnGoldLostPopup(lost);
+          setToastTitle(
+            locale === 'en'
+              ? `${enemyName} stole ${formatNumber(lost)}g!`
+              : `${enemyName} 偷走了 ${formatNumber(lost)} 金幣！`
+          );
+        }
+        return {
+          ...prev,
+          gold: Math.max(0, prev.gold - lost),
+          stolenGoldBank: prev.stolenGoldBank + lost,
+        };
+      });
+      if (isBoss) {
+        canvasRef.current?.triggerShake(9);
+      }
+    },
+    [locale]
+  );
+
+  const handleBossTimeoutPenalty = useCallback((stealRatio: number) => {
+    setBossSecondWindLeft(10);
+    setSave((prev) => {
+      const lost = prev.gold > 0 ? Math.max(1, Math.floor(prev.gold * stealRatio)) : 0;
+      if (lost > 0) {
+        canvasRef.current?.spawnGoldLostPopup(lost);
+      }
+      return {
+        ...prev,
+        gold: Math.max(0, prev.gold - lost),
+        stolenGoldBank: prev.stolenGoldBank + lost,
+      };
+    });
+  }, []);
+
+  const handleClassSkillBonusGold = useCallback((goldBonus: number) => {
+    if (goldBonus <= 0) return;
+    setSave((prev) => ({
+      ...prev,
+      gold: prev.gold + goldBonus,
+      lifetimeGold: prev.lifetimeGold + goldBonus,
+    }));
+  }, []);
+
   const buyUpgrade = useCallback(
     (id: string) => {
       const def = UPGRADES.find((u) => u.id === id);
@@ -494,39 +677,97 @@ export default function App() {
     [buyAmount]
   );
 
+  const buyPrimaryAttack = useCallback(() => {
+    setSave((prev) => {
+      const hero = HEROES.find((h) => h.id === prev.activeHero) || HEROES[0];
+      const curLv = getClassAttackLevel(prev, hero.id);
+      const { count, totalCost } = getBulkGenericCostQuote(
+        hero.primaryAttack.baseCost,
+        1.15,
+        curLv - 1,
+        prev.gold,
+        buyAmount
+      );
+      if (prev.gold < totalCost || count <= 0) return prev;
+      soundEngine.playUpgrade();
+      return {
+        ...prev,
+        gold: prev.gold - totalCost,
+        classAttackLevels: {
+          ...prev.classAttackLevels,
+          [hero.id]: curLv + count,
+        },
+      };
+    });
+  }, [buyAmount]);
+
+  const buyClassSkill = useCallback(
+    (skillIndex: 0 | 1) => {
+      setSave((prev) => {
+        const hero = HEROES.find((h) => h.id === prev.activeHero) || HEROES[0];
+        const sk = hero.autoSkills[skillIndex];
+        const curLv = getClassSkillLevel(prev, sk.id);
+        const { count, totalCost } = getBulkGenericCostQuote(
+          sk.upgradeBaseCost,
+          1.17,
+          curLv - 1,
+          prev.gold,
+          buyAmount
+        );
+        if (prev.gold < totalCost || count <= 0) return prev;
+        soundEngine.playUpgrade();
+        return {
+          ...prev,
+          gold: prev.gold - totalCost,
+          classSkillLevels: {
+            ...prev.classSkillLevels,
+            [sk.id]: curLv + count,
+          },
+        };
+      });
+    },
+    [buyAmount]
+  );
+
   const selectOrUnlockHero = useCallback((heroId: HeroId) => {
     const def = HEROES.find((h) => h.id === heroId);
     if (!def) return;
     setSave((prev) => {
-      const curRace = getRaceById(prev.activeRace);
-      const nextRace = curRace.classes.includes(heroId) ? prev.activeRace : def.defaultRace;
+      if (prev.activeHero === heroId) return prev;
 
       if (prev.unlockedHeroes.includes(heroId)) {
-        if (prev.activeHero !== heroId) {
-          soundEngine.playUpgrade();
-          return { ...prev, activeHero: heroId, activeRace: nextRace };
-        }
-        return prev;
+        const switchCost = getClassSwitchCost(def, prev.floor, prev.activeRace);
+        if (prev.gold < switchCost) return prev;
+        soundEngine.playUpgrade();
+        return {
+          ...prev,
+          gold: prev.gold - switchCost,
+          activeHero: heroId,
+        };
       }
-      if (prev.gold < def.unlockCost) return prev;
+
+      const unlockCost = getClassUnlockCost(def, prev.activeRace);
+      if (prev.gold < unlockCost) return prev;
       soundEngine.playAchievement();
       platformSDK.happytime();
       return {
         ...prev,
-        gold: prev.gold - def.unlockCost,
+        gold: prev.gold - unlockCost,
         unlockedHeroes: [...prev.unlockedHeroes, heroId],
         activeHero: heroId,
-        activeRace: nextRace,
       };
     });
   }, []);
 
   const selectRace = useCallback((raceId: RaceId) => {
-    soundEngine.playUpgrade();
-    setSave((prev) => ({
-      ...prev,
-      activeRace: raceId,
-    }));
+    setSave((prev) => {
+      if (prev.raceLocked) return prev;
+      soundEngine.playUpgrade();
+      return {
+        ...prev,
+        activeRace: raceId,
+      };
+    });
   }, []);
 
   const upgradeHero = useCallback((heroId: HeroId, e: React.MouseEvent) => {
@@ -639,6 +880,7 @@ export default function App() {
         unlockedHeroes: prev.unlockedHeroes,
         activeHero: prev.activeHero,
         activeRace: prev.activeRace,
+        raceLocked: true,
         heroRanks: prev.heroRanks,
         claimedQuests: prev.claimedQuests,
         totalKills: prev.totalKills,
@@ -651,6 +893,9 @@ export default function App() {
     });
     setSkillActiveLeft({ frenzy: 0, gold_rush: 0, smite: 0 });
     setSkillCdLeft({ frenzy: 0, gold_rush: 0, smite: 0 });
+    setCoinWardLeft(0);
+    setHaste2xLeft(0);
+    setBossSecondWindLeft(0);
     setDockTab('upgrades');
     setToastTitle(`Ascended! +${pendingEmblems} Heroic Emblem${pendingEmblems > 1 ? 's' : ''}`);
   }, [pendingEmblems]);
@@ -674,6 +919,101 @@ export default function App() {
       }
     );
   }, [damage2xLeft, isTrailerMode]);
+
+  const startCoinWardAd = useCallback(() => {
+    if (coinWardLeft > 0) return;
+    if (isTrailerMode) {
+      setCoinWardLeft(DAMAGE_BOOST_DURATION_SEC);
+      soundEngine.playShieldBlock();
+      return;
+    }
+    platformSDK.requestRewardedAd(
+      () => {
+        setCoinWardLeft(DAMAGE_BOOST_DURATION_SEC);
+        soundEngine.playShieldBlock();
+        platformSDK.happytime();
+      },
+      () => {
+        platformSDK.gameplayStop();
+        setAdModal({ type: 'coin_ward', secondsLeft: 3 });
+      }
+    );
+  }, [coinWardLeft, isTrailerMode]);
+
+  const startHaste2xAd = useCallback(() => {
+    if (haste2xLeft > 0) return;
+    if (isTrailerMode) {
+      setHaste2xLeft(180);
+      soundEngine.playSkillCast();
+      return;
+    }
+    platformSDK.requestRewardedAd(
+      () => {
+        setHaste2xLeft(180);
+        soundEngine.playSkillCast();
+        platformSDK.happytime();
+      },
+      () => {
+        platformSDK.gameplayStop();
+        setAdModal({ type: 'haste2x', secondsLeft: 3 });
+      }
+    );
+  }, [haste2xLeft, isTrailerMode]);
+
+  const startReclaimGoldAd = useCallback(() => {
+    const bank = saveRef.current.stolenGoldBank;
+    if (bank <= 0) return;
+    const reclaimAmount = Math.max(15, Math.ceil(bank * 1.5));
+    if (isTrailerMode) {
+      soundEngine.playGoldenCatch();
+      setSave((prev) => ({
+        ...prev,
+        gold: prev.gold + reclaimAmount,
+        lifetimeGold: prev.lifetimeGold + reclaimAmount,
+        stolenGoldBank: 0,
+      }));
+      setToastTitle(`+${formatNumber(reclaimAmount)}g Reclaimed!`);
+      return;
+    }
+    platformSDK.requestRewardedAd(
+      () => {
+        soundEngine.playGoldenCatch();
+        platformSDK.happytime();
+        setSave((prev) => ({
+          ...prev,
+          gold: prev.gold + reclaimAmount,
+          lifetimeGold: prev.lifetimeGold + reclaimAmount,
+          stolenGoldBank: 0,
+        }));
+        setToastTitle(`+${formatNumber(reclaimAmount)}g Reclaimed!`);
+      },
+      () => {
+        platformSDK.gameplayStop();
+        setAdModal({ type: 'reclaim_gold', secondsLeft: 3, reclaimAmount });
+      }
+    );
+  }, [isTrailerMode]);
+
+  const startBossSecondWindAd = useCallback(() => {
+    if (isTrailerMode) {
+      canvasRef.current?.triggerBossSecondWind();
+      setBossSecondWindLeft(0);
+      soundEngine.playSkillCast();
+      return;
+    }
+    platformSDK.requestRewardedAd(
+      () => {
+        canvasRef.current?.triggerBossSecondWind();
+        setBossSecondWindLeft(0);
+        soundEngine.playSkillCast();
+        platformSDK.happytime();
+      },
+      () => {
+        platformSDK.gameplayStop();
+        setAdModal({ type: 'boss_second_wind', secondsLeft: 3 });
+      }
+    );
+  }, [isTrailerMode]);
 
   const startOfflineDoubleAd = useCallback(() => {
     if (!offlinePending) return;
@@ -699,6 +1039,30 @@ export default function App() {
     if (!adModal || adModal.secondsLeft > 0) return;
     if (adModal.type === 'damage2x') {
       setDamage2xLeft(DAMAGE_BOOST_DURATION_SEC);
+      soundEngine.playSkillCast();
+      platformSDK.happytime();
+    } else if (adModal.type === 'coin_ward') {
+      setCoinWardLeft(DAMAGE_BOOST_DURATION_SEC);
+      soundEngine.playShieldBlock();
+      platformSDK.happytime();
+    } else if (adModal.type === 'haste2x') {
+      setHaste2xLeft(180);
+      soundEngine.playSkillCast();
+      platformSDK.happytime();
+    } else if (adModal.type === 'reclaim_gold' && adModal.reclaimAmount) {
+      const amount = adModal.reclaimAmount;
+      soundEngine.playGoldenCatch();
+      platformSDK.happytime();
+      setSave((prev) => ({
+        ...prev,
+        gold: prev.gold + amount,
+        lifetimeGold: prev.lifetimeGold + amount,
+        stolenGoldBank: 0,
+      }));
+      setToastTitle(`+${formatNumber(amount)}g Reclaimed!`);
+    } else if (adModal.type === 'boss_second_wind') {
+      canvasRef.current?.triggerBossSecondWind();
+      setBossSecondWindLeft(0);
       soundEngine.playSkillCast();
       platformSDK.happytime();
     } else if (adModal.type === 'offline' && adModal.offlineAmount) {
@@ -755,13 +1119,16 @@ export default function App() {
     const fresh = createFreshSave();
     setSave(fresh);
     setDamage2xLeft(0);
+    setCoinWardLeft(0);
+    setHaste2xLeft(0);
+    setBossSecondWindLeft(0);
     setSkillActiveLeft({ frenzy: 0, gold_rush: 0, smite: 0 });
     setSkillCdLeft({ frenzy: 0, gold_rush: 0, smite: 0 });
     setConfirmReset(false);
     platformSDK.saveCloudData(SAVE_KEY, JSON.stringify(fresh));
     canvasRef.current?.resetFloorWave(1);
-    setScreen('playing');
-    platformSDK.gameplayStart();
+    setScreen('title');
+    platformSDK.gameplayStop();
   }, [confirmReset]);
 
   const cycleTab = (dir: -1 | 1) => {
@@ -810,13 +1177,17 @@ export default function App() {
     ? Math.max(0, Math.min(100, ((bossSecondsLeft ?? BOSS_TIMER_SEC) / (BOSS_TIMER_SEC + stats.bossTimerBonusSec)) * 100))
     : Math.min(100, (save.killsOnFloor / MONSTERS_PER_FLOOR) * 100);
 
-  const hasSavedProgress = save.totalKills > 0 || save.floor > 1 || save.ascensionCount > 0;
+  const hasSavedProgress =
+    save.raceLocked || save.totalKills > 0 || save.floor > 1 || save.ascensionCount > 0;
   const activeRaceDef = getRaceById(save.activeRace);
+  const arenaLayout = getArenaLayout(viewport.w, viewport.h);
+  const isCompactArena = arenaLayout.arenaH < 360 || arenaLayout.arenaW < 460;
 
   return (
     <div
+      ref={rootRef}
       onContextMenu={(e) => e.preventDefault()}
-      className={`relative w-screen h-screen overflow-hidden bg-[#0e1017] text-slate-100 select-none ${
+      className={`relative w-full h-dvh overflow-hidden bg-[#0e1017] text-slate-100 select-none ${
         isTrailerMode ? '[&_*]:!cursor-none !cursor-none' : ''
       }`}
     >
@@ -827,20 +1198,31 @@ export default function App() {
         floor={save.floor}
         killsOnFloor={save.killsOnFloor}
         activeHero={save.activeHero}
+        activeRace={save.activeRace}
+        attackStyle={activeHeroDef.attackStyle}
+        autoSkills={activeHeroDef.autoSkills}
         heroProjectileColor={activeHeroDef.projectileColor}
         tapDamage={stats.tapDamage}
-        dps={stats.dps}
+        skillPowers={stats.skillPowers}
+        skillCdScales={stats.skillCdScales}
         critChance={stats.critChance}
         critMultiplier={stats.critMultiplier}
         goldMultiplier={stats.goldMultiplier}
         bossDmgMultiplier={stats.bossDmgMult}
+        cdScale={stats.cdScale}
         frenzyActive={skillActiveLeft.frenzy > 0}
         damage2xActive={damage2xLeft > 0}
+        coinWardActive={coinWardLeft > 0}
+        haste2xActive={haste2xLeft > 0}
         bossTimerBonusSec={stats.bossTimerBonusSec}
         showOnboardingHand={save.totalClicks < 3 && screen === 'playing' && !isTrailerMode}
         locale={locale}
         onTapStats={handleTapStats}
         onEnemySlain={handleEnemySlain}
+        onEnemyCounterAttack={handleEnemyCounterAttack}
+        onBossTimeoutPenalty={handleBossTimeoutPenalty}
+        onClassSkillBonusGold={handleClassSkillBonusGold}
+        onClassSkillTimers={setClassSkillTimers}
         onBossTimerUpdate={setBossSecondsLeft}
       />
 
@@ -870,18 +1252,18 @@ export default function App() {
             </button>
           </div>
 
-          <div className="pixel-panel rounded-2xl p-5 sm:p-7 max-w-xl w-full max-h-[92vh] overflow-y-auto custom-scroll flex flex-col items-center text-center gap-4 sm:gap-5">
-            {/* Pixel Hero Party vs Raid Dragon Showcase */}
-            <div className="w-full rounded-xl bg-gradient-to-b from-[#171c2b] to-[#10131e] border-2 border-[#2d344a] px-3 py-3 sm:py-4 flex items-center justify-between gap-2 overflow-hidden">
+          <div className="pixel-panel rounded-2xl p-4 sm:p-6 max-w-2xl w-full max-h-[92vh] overflow-y-auto custom-scroll flex flex-col items-center text-center gap-3.5 sm:gap-4">
+            {/* Pixel Hero Party (reflects currently selected Race!) vs Raid Dragon Showcase */}
+            <div className="w-full rounded-xl bg-gradient-to-b from-[#171c2b] to-[#10131e] border-2 border-[#2d344a] px-3 py-2.5 sm:py-3.5 flex items-center justify-between gap-2 overflow-hidden">
               <div className="flex items-end gap-1.5 sm:gap-2.5">
-                <PixelSpriteThumb kind="hero" id="warrior" size={46} />
-                <PixelSpriteThumb kind="hero" id="paladin" size={46} />
-                <PixelSpriteThumb kind="hero" id="mage" size={46} />
+                <PixelSpriteThumb kind="hero" id="warrior" raceId={save.activeRace} size={46} />
+                <PixelSpriteThumb kind="hero" id="paladin" raceId={save.activeRace} size={46} />
+                <PixelSpriteThumb kind="hero" id="mage" raceId={save.activeRace} size={46} />
                 <div className="hidden sm:block">
-                  <PixelSpriteThumb kind="hero" id="shaman" size={44} />
+                  <PixelSpriteThumb kind="hero" id="shaman" raceId={save.activeRace} size={44} />
                 </div>
                 <div className="hidden sm:block">
-                  <PixelSpriteThumb kind="hero" id="druid" size={44} />
+                  <PixelSpriteThumb kind="hero" id="druid" raceId={save.activeRace} size={44} />
                 </div>
               </div>
               <div className="font-pixel text-sm sm:text-base font-bold text-amber-400/90 px-1 shrink-0">
@@ -901,21 +1283,27 @@ export default function App() {
               <div className="font-pixel text-base sm:text-xl font-bold text-sky-300 tracking-[0.18em] pixel-text-shadow">
                 {t.gameTitleEdition}
               </div>
-              <p className="text-xs sm:text-sm font-medium text-slate-300 mt-1">
+              <p className="text-xs sm:text-sm font-medium text-slate-300 mt-0.5">
                 {t.subtitle}
               </p>
             </div>
 
-            {/* Returning Player Progress Strip OR New Adventurer Feature Highlights */}
+            {/* Locked Progress Card (returning run) OR Starting Race Picker (new run) */}
             {hasSavedProgress ? (
               <div className="w-full pixel-card rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-left">
-                <div>
-                  <div className="text-[11px] font-semibold text-slate-400">
-                    {activeRaceDef.name[locale]} · {activeHeroDef.name[locale]}
-                  </div>
-                  <div className="font-pixel text-base sm:text-lg font-bold text-white">
-                    {locale === 'en' ? `Floor ${save.floor}` : `第 ${save.floor} 層`} ·{' '}
-                    <span className="text-sky-300">{currentZone.name[locale]}</span>
+                <div className="flex items-center gap-3">
+                  <PixelSpriteThumb kind="hero" id={save.activeHero} raceId={save.activeRace} size={40} />
+                  <div>
+                    <div className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+                      <Lock className="w-3 h-3 text-amber-400" />
+                      <span>
+                        {activeRaceDef.name[locale]} ({activeRaceDef.faction}) · {activeHeroDef.name[locale]}
+                      </span>
+                    </div>
+                    <div className="font-pixel text-base sm:text-lg font-bold text-white">
+                      {locale === 'en' ? `Floor ${save.floor}` : `第 ${save.floor} 層`} ·{' '}
+                      <span className="text-sky-300">{currentZone.name[locale]}</span>
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 font-pixel text-lg font-bold text-amber-300 font-mono-num">
@@ -924,15 +1312,53 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-2 text-left">
-                {t.startFeatures.map((feat, idx) => (
-                  <div key={idx} className="pixel-card rounded-xl p-2.5 sm:p-3 flex flex-col gap-0.5">
-                    <div className="font-pixel text-sm font-bold text-amber-300 leading-tight">
-                      {feat.title}
-                    </div>
-                    <div className="text-[11px] text-slate-300 leading-snug">{feat.desc}</div>
-                  </div>
-                ))}
+              <div className="w-full flex flex-col gap-2 text-left">
+                <div className="flex items-center justify-between px-1">
+                  <span className="font-pixel text-xs sm:text-sm font-bold text-amber-300 uppercase tracking-wider">
+                    {t.chooseRaceLabel}
+                  </span>
+                  <span
+                    className={`text-[11px] font-bold ${
+                      activeRaceDef.faction === 'Alliance' ? 'text-sky-400' : 'text-rose-400'
+                    }`}
+                  >
+                    {activeRaceDef.faction} · {activeRaceDef.traitDesc[locale]}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                  {RACES.map((r) => {
+                    const selected = r.id === save.activeRace;
+                    const isAlliance = r.faction === 'Alliance';
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => selectRace(r.id)}
+                        className={`rounded-xl p-1.5 flex items-center gap-1.5 border-2 text-left cursor-pointer transition ${
+                          selected
+                            ? isAlliance
+                              ? 'bg-sky-500/25 border-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.28)]'
+                              : 'bg-rose-500/25 border-rose-400 shadow-[0_0_10px_rgba(251,113,133,0.28)]'
+                            : 'bg-[#171b28] border-[#2d354b] hover:border-slate-500'
+                        }`}
+                      >
+                        <PixelSpriteThumb kind="hero" id="warrior" raceId={r.id} size={28} />
+                        <div className="min-w-0">
+                          <div className="font-pixel text-[11px] font-bold text-white leading-tight truncate">
+                            {r.name[locale]}
+                          </div>
+                          <div
+                            className={`text-[9px] font-bold leading-tight truncate ${
+                              isAlliance ? 'text-sky-300' : 'text-rose-300'
+                            }`}
+                          >
+                            {r.traitDesc[locale]}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -961,55 +1387,111 @@ export default function App() {
         </div>
       )}
 
-      {/* ACTIVE GAME HUD + SPLIT DOCK */}
+      {/* ACTIVE GAME HUD + SPLIT DOCK (Synchronized 1:1 with GameCanvas via arenaLayout) */}
       {screen !== 'title' && (
-        <div className="fixed inset-0 z-10 pointer-events-none flex flex-col lg:flex-row">
-          {/* LEFT ARENA HUD OVERLAY */}
-          <div className="relative flex-1 h-[52%] lg:h-full flex flex-col justify-between p-3 sm:p-4">
+        <div
+          className="fixed inset-0 z-10 pointer-events-none flex"
+          style={{ flexDirection: arenaLayout.mode === 'side' ? 'row' : 'column' }}
+        >
+          {/* LEFT / TOP ARENA HUD OVERLAY */}
+          <div
+            className="relative flex flex-col justify-between p-2 sm:p-3.5 shrink-0"
+            style={{ width: arenaLayout.arenaW, height: arenaLayout.arenaH }}
+          >
             {/* Top Row inside Arena */}
-            <div className="flex items-start justify-between gap-2">
-              {/* Top-Left: 2X DAMAGE Banner */}
-              <button
-                onClick={startDamage2xAd}
-                disabled={damage2xLeft > 0}
-                className={`pointer-events-auto pixel-btn-gold rounded-xl px-3 py-2 flex items-center gap-2.5 cursor-pointer transition ${
-                  damage2xLeft > 0 ? 'opacity-95' : ''
-                }`}
-              >
-                <div className="w-8 h-8 rounded-lg bg-slate-900/90 border border-amber-950 flex items-center justify-center shrink-0">
-                  <Play className="w-4 h-4 text-amber-300 fill-amber-300" />
-                </div>
-                <div className="text-left leading-tight">
-                  <div className="font-pixel text-sm sm:text-base font-bold text-white pixel-text-shadow whitespace-nowrap">
-                    {damage2xLeft > 0 ? t.boostActive : t.boostBtn}
+            <div className="flex items-start justify-between gap-1.5 sm:gap-2">
+              {/* Top-Left: Ad Buffs & Recovery Stack */}
+              <div className="pointer-events-auto flex flex-col gap-1 items-start max-w-[140px] sm:max-w-[200px]">
+                <button
+                  onClick={startDamage2xAd}
+                  disabled={damage2xLeft > 0}
+                  className={`pixel-btn-gold rounded-xl px-2 py-1 sm:px-2.5 sm:py-1.5 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition ${
+                    damage2xLeft > 0 ? 'opacity-95' : ''
+                  }`}
+                >
+                  <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-slate-950 border border-amber-950 flex items-center justify-center shrink-0">
+                    <Play className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-300 fill-amber-300" />
                   </div>
-                  <div className="text-[11px] font-bold text-slate-950 font-mono-num">
-                    {damage2xLeft > 0
-                      ? `${Math.floor(damage2xLeft / 60)}:${String(Math.floor(damage2xLeft % 60)).padStart(2, '0')}`
-                      : t.boostSub}
+                  <div className="text-left leading-tight">
+                    <div className="text-[11px] sm:text-xs font-extrabold tracking-tight text-slate-950 whitespace-nowrap">
+                      {damage2xLeft > 0 ? t.boostActive : t.boostBtn}
+                    </div>
+                    <div className="text-[9px] sm:text-[10px] font-bold text-amber-950 font-mono-num">
+                      {damage2xLeft > 0
+                        ? `${Math.floor(damage2xLeft / 60)}:${String(Math.floor(damage2xLeft % 60)).padStart(2, '0')}`
+                        : t.boostSub}
+                    </div>
                   </div>
+                </button>
+
+                <div className="flex flex-wrap items-center gap-1">
+                  <button
+                    onClick={startCoinWardAd}
+                    disabled={coinWardLeft > 0}
+                    className={`rounded-lg px-1.5 py-0.5 sm:px-2 sm:py-1 flex items-center gap-1 border text-[10px] sm:text-[11px] font-bold cursor-pointer transition ${
+                      coinWardLeft > 0
+                        ? 'bg-sky-500/30 border-sky-300 text-sky-100'
+                        : 'pixel-card text-sky-300 hover:brightness-115'
+                    }`}
+                  >
+                    <Shield className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                    <span className="whitespace-nowrap">
+                      {coinWardLeft > 0
+                        ? `${t.wardActive} ${Math.floor(coinWardLeft / 60)}:${String(Math.floor(coinWardLeft % 60)).padStart(2, '0')}`
+                        : t.wardBtn}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={startHaste2xAd}
+                    disabled={haste2xLeft > 0}
+                    className={`rounded-lg px-1.5 py-0.5 sm:px-2 sm:py-1 flex items-center gap-1 border text-[10px] sm:text-[11px] font-bold cursor-pointer transition ${
+                      haste2xLeft > 0
+                        ? 'bg-violet-500/30 border-violet-300 text-violet-100'
+                        : 'pixel-card text-violet-300 hover:brightness-115'
+                    }`}
+                  >
+                    <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                    <span className="whitespace-nowrap">
+                      {haste2xLeft > 0
+                        ? `${t.hasteActive} ${Math.floor(haste2xLeft / 60)}:${String(Math.floor(haste2xLeft % 60)).padStart(2, '0')}`
+                        : t.hasteBtn}
+                    </span>
+                  </button>
+
+                  {save.stolenGoldBank > 0 && (
+                    <button
+                      onClick={startReclaimGoldAd}
+                      className="pixel-btn-green rounded-lg px-1.5 py-0.5 sm:px-2 sm:py-1 flex items-center gap-1 text-[10px] sm:text-[11px] font-extrabold text-white cursor-pointer animate-pulse"
+                    >
+                      <Coins className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-300 shrink-0" />
+                      <span className="whitespace-nowrap">
+                        {t.reclaimBtn} +{formatNumber(Math.max(15, Math.ceil(save.stolenGoldBank * 1.5)))}g
+                      </span>
+                    </button>
+                  )}
                 </div>
-              </button>
+              </div>
 
               {/* Top-Center: Gold + Floor + Progress Bar */}
-              <div className="flex flex-col items-center text-center mx-auto">
-                <div className="flex items-center gap-2">
-                  <PixelIcon name="coin" size={30} />
-                  <span className="font-pixel text-3xl sm:text-4xl font-bold text-amber-300 pixel-text-shadow font-mono-num">
+              <div className="flex flex-col items-center text-center mx-auto shrink-0">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <PixelIcon name="coin" size={isCompactArena ? 22 : 28} />
+                  <span className="font-pixel text-2xl sm:text-4xl font-semibold text-amber-300 pixel-text-shadow font-mono-num leading-none">
                     {formatNumber(save.gold)}
                   </span>
                 </div>
 
-                <div className="mt-0.5 font-pixel text-lg sm:text-xl font-bold text-white pixel-text-shadow tracking-wide">
+                <div className="mt-0.5 font-pixel text-base sm:text-xl font-semibold text-white pixel-text-shadow tracking-wide leading-tight">
                   {locale === 'en' ? `${t.floorLabel} ${save.floor}` : `${t.floorLabel} ${save.floor} 層`}
                 </div>
-                <div className="text-xs font-semibold text-slate-300 pixel-text-shadow -mt-0.5">
+                <div className="text-[11px] sm:text-xs font-bold text-slate-200 pixel-text-shadow -mt-0.5">
                   {currentZone.name[locale]} · {currentZone.levelRange}
                   {zoneTier > 1 ? ` · Tier ${zoneTier}` : ''}
                 </div>
 
                 {/* Floor Kills / Boss Timer Bar */}
-                <div className="mt-1.5 relative w-44 sm:w-64 h-5 rounded-full bg-[#1a1d2b] border-2 border-[#090b10] overflow-hidden shadow-md">
+                <div className="mt-1 relative w-36 sm:w-56 h-4 sm:h-5 rounded-full bg-[#1a1d2b] border-2 border-[#090b10] overflow-hidden shadow-md">
                   <div
                     className={`h-full transition-all duration-150 ${
                       bossFloor
@@ -1018,7 +1500,7 @@ export default function App() {
                     }`}
                     style={{ width: `${floorProgressPct}%` }}
                   />
-                  <div className="absolute inset-0 flex items-center justify-center font-pixel text-xs font-bold text-white pixel-text-shadow font-mono-num">
+                  <div className="absolute inset-0 flex items-center justify-center text-[11px] sm:text-xs font-extrabold text-white pixel-text-shadow font-mono-num">
                     {bossFloor
                       ? `${t.bossTag} · ${bossSecondsLeft ?? BOSS_TIMER_SEC}s`
                       : `${save.killsOnFloor}/${MONSTERS_PER_FLOOR}`}
@@ -1027,23 +1509,38 @@ export default function App() {
               </div>
 
               {/* Top-Right of Arena: Settings & Help */}
-              <div className="pointer-events-auto flex flex-col gap-2">
+              <div className="pointer-events-auto flex flex-col gap-1.5 sm:gap-2 shrink-0">
                 <button
                   onClick={togglePause}
                   aria-label="Settings"
-                  className="pixel-card w-11 h-11 rounded-xl flex items-center justify-center hover:brightness-115 cursor-pointer"
+                  className="pixel-card w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center hover:brightness-115 cursor-pointer"
                 >
-                  <PixelIcon name="gear" size={24} />
+                  <PixelIcon name="gear" size={isCompactArena ? 20 : 24} />
                 </button>
                 <button
                   onClick={openHelp}
                   aria-label="Help"
-                  className="pixel-card w-11 h-11 rounded-xl flex items-center justify-center hover:brightness-115 cursor-pointer"
+                  className="pixel-card w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center hover:brightness-115 cursor-pointer"
                 >
-                  <PixelIcon name="help" size={24} />
+                  <PixelIcon name="help" size={isCompactArena ? 20 : 24} />
                 </button>
               </div>
             </div>
+
+            {/* Boss Timeout Penalty & Second Wind Recovery Prompt */}
+            {bossSecondWindLeft > 0 && bossFloor && (
+              <div className="pointer-events-auto self-center pixel-panel border-rose-500/80 rounded-xl px-3.5 py-2 flex items-center gap-3 shadow-lg">
+                <span className="font-pixel text-xs sm:text-sm font-bold text-rose-300">
+                  {t.bossPenaltyBanner}
+                </span>
+                <button
+                  onClick={startBossSecondWindAd}
+                  className="pixel-btn-gold px-3 py-1 rounded-lg font-pixel text-xs font-bold text-slate-950 cursor-pointer shrink-0"
+                >
+                  {t.bossSecondWindCta}
+                </button>
+              </div>
+            )}
 
             {/* Toast Banner */}
             {toastTitle && (
@@ -1059,48 +1556,101 @@ export default function App() {
               </div>
             )}
 
-            {/* Bottom Row inside Arena: Skill Hotbar (1, 2, 3) + Compact DPS badge */}
-            <div className="flex items-end justify-between gap-2">
-              <div className="pointer-events-auto flex items-center gap-2">
-                {SKILLS.map((sk) => {
-                  const lv = getSkillLevel(save, sk.id);
-                  if (lv <= 0) return null;
-                  const active = skillActiveLeft[sk.id] > 0;
-                  const cd = skillCdLeft[sk.id];
-                  const ready = cd <= 0;
-                  return (
-                    <button
-                      key={sk.id}
-                      onClick={() => castSkill(sk.id)}
-                      disabled={!ready && !active}
-                      title={`${sk.name[locale]} (${sk.hotkey})`}
-                      className={`relative w-12 h-12 rounded-full border-2 flex flex-col items-center justify-center cursor-pointer transition ${
-                        active
-                          ? 'bg-amber-500 border-amber-200 shadow-[0_0_16px_rgba(251,191,36,0.7)] scale-105'
-                          : ready
-                          ? 'bg-[#252a3b] border-amber-400 hover:brightness-115 active:scale-95'
-                          : 'bg-[#161924] border-slate-700 opacity-80 cursor-not-allowed'
-                      }`}
-                    >
-                      <PixelIcon
-                        name={sk.id === 'frenzy' ? 'fury' : sk.id === 'gold_rush' ? 'greed' : 'titan'}
-                        size={22}
-                      />
-                      <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-slate-950 border border-slate-600 font-pixel text-[11px] font-bold text-slate-200 flex items-center justify-center">
-                        {sk.hotkey}
-                      </span>
-                      {(active || cd > 0) && (
-                        <span className="absolute inset-0 rounded-full bg-black/55 flex items-center justify-center font-mono-num text-[11px] font-extrabold text-amber-300">
-                          {Math.ceil(active ? skillActiveLeft[sk.id] : cd)}s
+            {/* Bottom Row inside Arena: Active Skills (1, 2, 3) + Class Countdown Auto-Skills + Compact Readout */}
+            <div className="flex items-end justify-between gap-1.5 sm:gap-2 flex-wrap">
+              <div className="pointer-events-auto flex items-end gap-1.5 sm:gap-2.5 flex-wrap">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  {SKILLS.map((sk) => {
+                    const lv = getSkillLevel(save, sk.id);
+                    if (lv <= 0) return null;
+                    const active = skillActiveLeft[sk.id] > 0;
+                    const cd = skillCdLeft[sk.id];
+                    const ready = cd <= 0;
+                    return (
+                      <button
+                        key={sk.id}
+                        onClick={() => castSkill(sk.id)}
+                        disabled={!ready && !active}
+                        title={`${sk.name[locale]} (${sk.hotkey})`}
+                        className={`relative w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 flex flex-col items-center justify-center cursor-pointer transition ${
+                          active
+                            ? 'bg-amber-500 border-amber-200 shadow-[0_0_16px_rgba(251,191,36,0.7)] scale-105'
+                            : ready
+                            ? 'bg-[#252a3b] border-amber-400 hover:brightness-115 active:scale-95'
+                            : 'bg-[#161924] border-slate-700 opacity-80 cursor-not-allowed'
+                        }`}
+                      >
+                        <PixelIcon
+                          name={sk.id === 'frenzy' ? 'fury' : sk.id === 'gold_rush' ? 'greed' : 'titan'}
+                          size={isCompactArena ? 18 : 22}
+                        />
+                        <span className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-slate-950 border border-slate-600 font-pixel text-[10px] sm:text-[11px] font-bold text-slate-200 flex items-center justify-center">
+                          {sk.hotkey}
                         </span>
-                      )}
-                    </button>
-                  );
-                })}
+                        {(active || cd > 0) && (
+                          <span className="absolute inset-0 rounded-full bg-black/55 flex items-center justify-center font-mono-num text-[10px] sm:text-[11px] font-extrabold text-amber-300">
+                            {Math.ceil(active ? skillActiveLeft[sk.id] : cd)}s
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Class Countdown Auto-Skills Icon Strip (hover/focus shows skill name) */}
+                <div className="pixel-card rounded-xl px-1.5 py-1 sm:px-2 sm:py-1.5 flex items-center gap-1.5 sm:gap-2">
+                  {activeHeroDef.autoSkills.map((sk, idx) => {
+                    const timer = classSkillTimers[idx];
+                    const maxCd = timer?.maxCd || Math.max(0.4, sk.cooldownSec * stats.skillCdScales[idx]);
+                    const cd = timer?.cd ?? maxCd;
+                    const pct = Math.max(0, Math.min(100, ((maxCd - cd) / Math.max(0.1, maxCd)) * 100));
+                    const skLv = getClassSkillLevel(save, sk.id);
+                    return (
+                      <div
+                        key={sk.id}
+                        tabIndex={0}
+                        title={sk.name[locale]}
+                        aria-label={sk.name[locale]}
+                        className="relative group w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-[#151824] border-2 flex items-center justify-center cursor-help outline-none"
+                        style={{ borderColor: `${sk.color}88` }}
+                      >
+                        <div
+                          className="absolute bottom-0 left-0 right-0 opacity-25 pointer-events-none transition-all duration-100 rounded-b-lg"
+                          style={{ height: `${pct}%`, backgroundColor: sk.color }}
+                        />
+                        <SkillPixelIcon visual={sk.effect} size={isCompactArena ? 20 : 24} className="relative z-10" />
+                        <span className="absolute -top-1.5 -right-1.5 px-1 rounded bg-slate-950 border border-slate-700 font-mono-num text-[9px] font-bold text-amber-300 z-20">
+                          {skLv}
+                        </span>
+                        <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 px-1 rounded bg-slate-950/95 border border-slate-700 font-mono-num text-[9px] font-bold text-slate-100 z-20 leading-tight">
+                          {cd.toFixed(1)}s
+                        </span>
+
+                        {/* Hover / Focus Tooltip revealing Skill Name */}
+                        <div className="hidden group-hover:flex group-focus-within:flex flex-col gap-0.5 absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 w-48 pixel-panel rounded-xl px-2.5 py-2 z-30 pointer-events-none text-left shadow-xl">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-pixel text-xs font-bold leading-tight" style={{ color: sk.color }}>
+                              {sk.name[locale]}
+                            </span>
+                            <span className="font-mono-num text-[10px] font-bold text-amber-300 shrink-0">
+                              Lv.{skLv}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-300 leading-snug">
+                            {sk.description[locale]}
+                          </div>
+                          <div className="text-[10px] font-mono-num text-slate-400">
+                            {maxCd.toFixed(1)}s CD · x{sk.damageMult.toFixed(1)} DMG
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Compact Combat Readout */}
-              <div className="pixel-card px-3 py-1.5 rounded-lg flex items-center gap-3 text-xs font-mono-num">
+              <div className="pixel-card px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg flex items-center gap-2 sm:gap-3 text-[11px] sm:text-xs font-mono-num">
                 <span className="text-sky-300 font-bold">
                   {t.tapDmgShort}: {formatNumber(stats.tapDamage)}
                 </span>
@@ -1118,8 +1668,11 @@ export default function App() {
           </div>
 
           {/* RIGHT / BOTTOM RPG CONTROL DOCK */}
-          <div className="pointer-events-auto w-full lg:w-[430px] h-[48%] lg:h-full p-2 sm:p-3 flex flex-col">
-            <div className="pixel-panel rounded-2xl flex-1 flex flex-col overflow-hidden p-2.5 sm:p-3 gap-2.5">
+          <div
+            className="pointer-events-auto p-1.5 sm:p-2.5 flex flex-col shrink-0"
+            style={{ width: arenaLayout.dockW, height: arenaLayout.dockH }}
+          >
+            <div className="pixel-panel rounded-2xl flex-1 flex flex-col overflow-hidden p-2 sm:p-3 gap-2">
               {/* 6-Tab Bar with < > Arrows */}
               <div className="flex items-center gap-1">
                 <button
@@ -1192,6 +1745,134 @@ export default function App() {
                   </div>
 
                   <div className="flex-1 overflow-y-auto custom-scroll pr-1 flex flex-col gap-2">
+                    {/* Active Class Unique Primary Attack Upgrade */}
+                    {(() => {
+                      const atk = activeHeroDef.primaryAttack;
+                      const atkLv = getClassAttackLevel(save, save.activeHero);
+                      const { count, totalCost } = getBulkGenericCostQuote(
+                        atk.baseCost,
+                        1.15,
+                        atkLv - 1,
+                        save.gold,
+                        buyAmount
+                      );
+                      const canAfford = save.gold >= totalCost;
+                      const nextMilestone = Math.floor(atkLv / 25 + 1) * 25;
+                      return (
+                        <div className="pixel-card rounded-xl px-3 py-2.5 flex items-center justify-between gap-2.5 border-sky-400/40">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div
+                              className="w-11 h-11 rounded-lg bg-[#151824] border-2 flex items-center justify-center shrink-0"
+                              style={{ borderColor: `${atk.color}88` }}
+                            >
+                              <SkillPixelIcon visual={atk.style} size={28} />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-pixel text-base font-bold text-white leading-tight truncate">
+                                  {atk.name[locale]}
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded bg-sky-500/20 border border-sky-400/40 text-[9px] font-bold text-sky-300 shrink-0">
+                                  {t.primaryAtkTag}
+                                </span>
+                              </div>
+                              <div className="text-xs font-bold text-sky-300 truncate">
+                                {formatNumber(stats.tapDamage)} dmg/tap · x{atk.powerMult.toFixed(2)}
+                              </div>
+                              <div className="text-[11px] font-semibold text-slate-400">
+                                Lv. {atkLv} · x2 at Lv. {nextMilestone}
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={buyPrimaryAttack}
+                            disabled={!canAfford}
+                            className={`shrink-0 min-w-[104px] px-3 py-2 rounded-xl flex items-center justify-center gap-1.5 font-pixel text-base font-bold cursor-pointer transition ${
+                              canAfford
+                                ? 'pixel-btn-green text-white pixel-text-shadow'
+                                : 'pixel-btn-slate text-slate-300 opacity-75 cursor-not-allowed'
+                            }`}
+                          >
+                            <PixelIcon name="coin" size={18} />
+                            <span className="font-mono-num">
+                              {formatNumber(totalCost)}
+                              {count > 1 ? ` (x${count})` : ''}
+                            </span>
+                          </button>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Individual Upgrades for Active Class's 2 Countdown Auto-Skills */}
+                    {([0, 1] as const).map((idx) => {
+                      const sk = activeHeroDef.autoSkills[idx];
+                      const skLv = getClassSkillLevel(save, sk.id);
+                      const { count, totalCost } = getBulkGenericCostQuote(
+                        sk.upgradeBaseCost,
+                        1.17,
+                        skLv - 1,
+                        save.gold,
+                        buyAmount
+                      );
+                      const canAfford = save.gold >= totalCost;
+                      const nextMilestone = Math.floor(skLv / 25 + 1) * 25;
+                      const estDmg = stats.skillPowers[idx] * sk.damageMult;
+                      const effCd = Math.max(0.4, sk.cooldownSec * stats.skillCdScales[idx]);
+
+                      return (
+                        <div
+                          key={sk.id}
+                          className="pixel-card rounded-xl px-3 py-2.5 flex items-center justify-between gap-2.5"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div
+                              className="w-11 h-11 rounded-lg bg-[#151824] border-2 flex items-center justify-center shrink-0"
+                              style={{ borderColor: `${sk.color}88` }}
+                            >
+                              <SkillPixelIcon visual={sk.effect} size={28} />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className="font-pixel text-base font-bold leading-tight truncate"
+                                  style={{ color: sk.color }}
+                                >
+                                  {sk.name[locale]}
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded bg-violet-500/20 border border-violet-400/40 text-[9px] font-bold text-violet-200 shrink-0">
+                                  {t.skillUpgradeTag} #{idx + 1}
+                                </span>
+                              </div>
+                              <div className="text-xs font-bold text-emerald-300 truncate">
+                                {formatNumber(estDmg)} {sk.aoe ? 'AoE' : 'DMG'} · {effCd.toFixed(1)}s CD
+                              </div>
+                              <div className="text-[11px] font-semibold text-slate-400">
+                                Lv. {skLv} · x2 at Lv. {nextMilestone}
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => buyClassSkill(idx)}
+                            disabled={!canAfford}
+                            className={`shrink-0 min-w-[104px] px-3 py-2 rounded-xl flex items-center justify-center gap-1.5 font-pixel text-base font-bold cursor-pointer transition ${
+                              canAfford
+                                ? 'pixel-btn-green text-white pixel-text-shadow'
+                                : 'pixel-btn-slate text-slate-300 opacity-75 cursor-not-allowed'
+                            }`}
+                          >
+                            <PixelIcon name="coin" size={18} />
+                            <span className="font-mono-num">
+                              {formatNumber(totalCost)}
+                              {count > 1 ? ` (x${count})` : ''}
+                            </span>
+                          </button>
+                        </div>
+                      );
+                    })}
+
+                    {/* Shared Attribute Upgrades */}
                     {UPGRADES.map((u) => {
                       const owned = save.upgrades[u.id] || 0;
                       const { count, totalCost } = getBulkUpgradeQuote(u, owned, save.gold, buyAmount);
@@ -1199,18 +1880,14 @@ export default function App() {
                       const nextMilestone = Math.floor(owned / 25 + 1) * 25;
 
                       let subline = '';
-                      if (u.kind === 'tap') {
-                        subline = `${formatNumber(stats.tapDamage)} damage per tap`;
-                      } else if (u.kind === 'dps') {
-                        subline = `${formatNumber(stats.dps)} damage per sec`;
-                      } else if (u.kind === 'allDmg') {
+                      if (u.kind === 'allDmg') {
                         subline = `x${(1 + owned * u.baseValue).toFixed(2)} all damage`;
                       } else if (u.kind === 'gold') {
                         subline = `x${(1 + owned * u.baseValue).toFixed(2)} gold`;
                       } else if (u.kind === 'crit') {
                         subline = `${Math.round(stats.critChance * 100)}% crit for x${stats.critMultiplier.toFixed(0)}`;
                       } else {
-                        subline = `+${formatNumber(owned * 32)} tap & +${formatNumber(owned * 48)} dps`;
+                        subline = `+${formatNumber(owned * 32)} tap & +${formatNumber(owned * 48)} skill`;
                       }
 
                       return (
@@ -1256,7 +1933,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* TAB 2: HEROES (All 9 WoW: Forever Classes & 9 Races) */}
+              {/* TAB 2: HEROES (Locked Race + Coin-Paid Class Switching among 9 WoW: Forever Classes) */}
               {dockTab === 'heroes' && (
                 <div className="flex-1 flex flex-col gap-2 overflow-hidden">
                   <div className="text-center">
@@ -1266,50 +1943,81 @@ export default function App() {
                     <div className="text-[11px] text-slate-300">{t.heroesSub}</div>
                   </div>
 
-                  {/* Active Race & Faction Selector for current Hero Class */}
+                  {/* Locked Race Info + Active Class Icon Kit (Skill names via mouseover tooltip) */}
                   {(() => {
-                    const validRaces = getRacesForClass(save.activeHero);
                     const curRace = getRaceById(save.activeRace);
-                    const isNewCombo = curRace.newClassesInForever.includes(save.activeHero);
+                    const isAffinity = curRace.classes.includes(save.activeHero);
                     return (
-                      <div className="pixel-card rounded-xl p-2 flex flex-col gap-1.5 shrink-0">
-                        <div className="flex items-center justify-between gap-2 text-[11px]">
-                          <span className="font-pixel font-bold text-slate-200">
-                            {t.raceLabel}:{' '}
-                            <span
-                              className={
-                                curRace.faction === 'Alliance' ? 'text-sky-400' : 'text-rose-400'
-                              }
-                            >
-                              {curRace.name[locale]} ({curRace.faction})
-                            </span>
-                          </span>
-                          <span className="text-[10px] font-bold text-emerald-400">
-                            {curRace.traitName[locale]}: {curRace.traitDesc[locale]}
-                            {isNewCombo ? ' · ★' : ''}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          {validRaces.map((r) => {
-                            const selected = r.id === save.activeRace;
-                            const isForeverNew = r.newClassesInForever.includes(save.activeHero);
-                            return (
-                              <button
-                                key={r.id}
-                                onClick={() => selectRace(r.id)}
-                                className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer border transition ${
-                                  selected
-                                    ? r.faction === 'Alliance'
-                                      ? 'bg-sky-500/25 border-sky-400 text-sky-200'
-                                      : 'bg-rose-500/25 border-rose-400 text-rose-200'
-                                    : 'bg-[#171a26] border-[#32394f] text-slate-300 hover:border-slate-500'
-                                }`}
+                      <div className="pixel-card rounded-xl p-2 flex items-center justify-between gap-2 shrink-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <PixelSpriteThumb
+                            kind="hero"
+                            id={save.activeHero}
+                            raceId={save.activeRace}
+                            size={34}
+                          />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1 text-[11px] font-pixel font-bold text-slate-200 truncate">
+                              <Lock className="w-3 h-3 text-amber-400 shrink-0" />
+                              <span
+                                className={
+                                  curRace.faction === 'Alliance' ? 'text-sky-400' : 'text-rose-400'
+                                }
                               >
-                                {r.name[locale]}
-                                {isForeverNew ? ' ★' : ''}
-                              </button>
-                            );
-                          })}
+                                {curRace.name[locale]}
+                              </span>
+                              <span className="text-slate-400">· {activeHeroDef.name[locale]}</span>
+                              {isAffinity && (
+                                <span className="text-emerald-400 text-[10px]">★</span>
+                              )}
+                            </div>
+                            <div className="text-[10px] font-bold text-emerald-400 truncate">
+                              {curRace.traitName[locale]}: {curRace.traitDesc[locale]}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Icon-only Class Primary Attack + 2 Auto-Skills with mouseover name tooltips */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <div
+                            tabIndex={0}
+                            title={activeHeroDef.primaryAttack.name[locale]}
+                            className="relative group w-8 h-8 rounded-lg bg-[#151824] border flex items-center justify-center cursor-help outline-none"
+                            style={{ borderColor: `${activeHeroDef.primaryAttack.color}88` }}
+                          >
+                            <SkillPixelIcon visual={activeHeroDef.primaryAttack.style} size={20} />
+                            <div className="hidden group-hover:flex group-focus-within:flex flex-col gap-0.5 absolute top-full right-0 mt-2 w-44 pixel-panel rounded-lg px-2 py-1.5 z-30 pointer-events-none text-left shadow-xl">
+                              <span className="font-pixel text-[11px] font-bold text-sky-300">
+                                {activeHeroDef.primaryAttack.name[locale]}
+                              </span>
+                              <span className="text-[10px] text-slate-300 leading-snug">
+                                {activeHeroDef.primaryAttack.description[locale]}
+                              </span>
+                            </div>
+                          </div>
+
+                          {activeHeroDef.autoSkills.map((sk) => (
+                            <div
+                              key={sk.id}
+                              tabIndex={0}
+                              title={sk.name[locale]}
+                              className="relative group w-8 h-8 rounded-lg bg-[#151824] border flex items-center justify-center cursor-help outline-none"
+                              style={{ borderColor: `${sk.color}88` }}
+                            >
+                              <SkillPixelIcon visual={sk.effect} size={20} />
+                              <div className="hidden group-hover:flex group-focus-within:flex flex-col gap-0.5 absolute top-full right-0 mt-2 w-44 pixel-panel rounded-lg px-2 py-1.5 z-30 pointer-events-none text-left shadow-xl">
+                                <span
+                                  className="font-pixel text-[11px] font-bold"
+                                  style={{ color: sk.color }}
+                                >
+                                  {sk.name[locale]} ({sk.cooldownSec}s)
+                                </span>
+                                <span className="text-[10px] text-slate-300 leading-snug">
+                                  {sk.description[locale]}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     );
@@ -1321,7 +2029,11 @@ export default function App() {
                       const isFighting = save.activeHero === hero.id;
                       const rank = getHeroRank(save, hero.id);
                       const upgCost = getHeroUpgradeCost(hero, rank);
-                      const canUnlock = !unlocked && save.gold >= hero.unlockCost;
+                      const unlockCost = getClassUnlockCost(hero, save.activeRace);
+                      const switchCost = getClassSwitchCost(hero, save.floor, save.activeRace);
+                      const hasAffinity = activeRaceDef.classes.includes(hero.id);
+                      const canUnlock = !unlocked && save.gold >= unlockCost;
+                      const canSwitch = unlocked && !isFighting && save.gold >= switchCost;
                       const canUpgrade = unlocked && save.gold >= upgCost;
 
                       return (
@@ -1332,48 +2044,74 @@ export default function App() {
                             isFighting
                               ? 'bg-[#26332c] border-emerald-400 shadow-[0_0_12px_rgba(74,222,128,0.28)]'
                               : unlocked
-                              ? 'bg-[#232838] border-[#3d4661] hover:border-sky-400'
+                              ? 'bg-[#232838] border-[#3d4661] hover:border-amber-400'
                               : 'bg-[#191c28] border-[#2d3347]'
                           }`}
                         >
+                          {hasAffinity && !isFighting && (
+                            <span className="absolute top-1 left-1 px-1 py-0.2 rounded bg-emerald-500/20 border border-emerald-400/50 text-[8px] font-bold text-emerald-300">
+                              -30%
+                            </span>
+                          )}
                           {!unlocked && (
                             <div className="absolute top-1.5 right-1.5">
-                              <PixelIcon name="lock" size={16} />
+                              <PixelIcon name="lock" size={15} />
                             </div>
                           )}
 
                           <div className={`mt-1 ${!unlocked ? 'opacity-45 grayscale' : ''}`}>
-                            <PixelSpriteThumb kind="hero" id={hero.id} size={46} />
+                            <PixelSpriteThumb
+                              kind="hero"
+                              id={hero.id}
+                              raceId={save.activeRace}
+                              size={46}
+                            />
                           </div>
 
                           <div>
                             <div className="font-pixel text-sm font-bold text-white leading-tight">
                               {hero.name[locale]} {unlocked ? `Lv.${rank}` : ''}
                             </div>
-                            <div className="text-[11px] font-bold text-sky-300 leading-tight mt-0.5">
+                            <div className="text-[10px] font-bold text-sky-300 leading-tight mt-0.5">
                               {hero.bonusLabel(rank, locale)}
                             </div>
                           </div>
 
                           {unlocked ? (
                             <div className="w-full flex flex-col gap-1">
-                              <div
-                                className={`font-pixel text-xs font-bold tracking-wider ${
-                                  isFighting ? 'text-emerald-400' : 'text-sky-400'
-                                }`}
-                              >
-                                {isFighting ? t.fighting : t.pick}
-                              </div>
+                              {isFighting ? (
+                                <div className="font-pixel text-xs font-bold tracking-wider text-emerald-400 py-0.5">
+                                  {t.fighting}
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    selectOrUnlockHero(hero.id);
+                                  }}
+                                  disabled={!canSwitch}
+                                  className={`w-full py-1 rounded-lg font-pixel text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer ${
+                                    canSwitch
+                                      ? 'pixel-btn-gold text-slate-950'
+                                      : 'pixel-btn-slate text-slate-400 opacity-75 cursor-not-allowed'
+                                  }`}
+                                >
+                                  <span>{t.switchClass}</span>
+                                  <PixelIcon name="coin" size={11} />
+                                  <span className="font-mono-num">{formatNumber(switchCost)}</span>
+                                </button>
+                              )}
                               <button
                                 onClick={(e) => upgradeHero(hero.id, e)}
                                 disabled={!canUpgrade}
-                                className={`w-full py-1 rounded-lg font-pixel text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer ${
+                                className={`w-full py-1 rounded-lg font-pixel text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer ${
                                   canUpgrade
                                     ? 'pixel-btn-green text-white'
                                     : 'pixel-btn-slate text-slate-300 opacity-75 cursor-not-allowed'
                                 }`}
                               >
-                                <PixelIcon name="coin" size={12} />
+                                <span>{t.upgrade}</span>
+                                <PixelIcon name="coin" size={11} />
                                 <span className="font-mono-num">{formatNumber(upgCost)}</span>
                               </button>
                             </div>
@@ -1384,14 +2122,14 @@ export default function App() {
                                 selectOrUnlockHero(hero.id);
                               }}
                               disabled={!canUnlock}
-                              className={`w-full py-1.5 rounded-lg font-pixel text-xs font-bold flex items-center justify-center gap-1 cursor-pointer ${
+                              className={`w-full py-1.5 rounded-lg font-pixel text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer ${
                                 canUnlock
                                   ? 'pixel-btn-gold text-slate-950'
                                   : 'pixel-btn-slate text-slate-400 opacity-75 cursor-not-allowed'
                               }`}
                             >
-                              <PixelIcon name="coin" size={13} />
-                              <span className="font-mono-num">{formatNumber(hero.unlockCost)}</span>
+                              <PixelIcon name="coin" size={12} />
+                              <span className="font-mono-num">{formatNumber(unlockCost)}</span>
                             </button>
                           )}
                         </div>
@@ -1785,7 +2523,17 @@ export default function App() {
               {t.adTitle}
             </div>
             <h3 className="font-pixel text-lg font-bold text-white">
-              {adModal.type === 'damage2x' ? t.adDamage : t.adOffline}
+              {adModal.type === 'damage2x'
+                ? t.adDamage
+                : adModal.type === 'coin_ward'
+                ? t.adWard
+                : adModal.type === 'haste2x'
+                ? t.adHaste
+                : adModal.type === 'reclaim_gold'
+                ? t.adReclaim
+                : adModal.type === 'boss_second_wind'
+                ? t.adBossWind
+                : t.adOffline}
             </h3>
             <div className="pixel-card py-6 rounded-xl font-pixel text-base text-amber-300">
               {adModal.secondsLeft > 0 ? `${t.adWait} ${adModal.secondsLeft}s` : t.adClaim}

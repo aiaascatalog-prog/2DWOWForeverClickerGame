@@ -151,7 +151,7 @@ class PlatformSDK {
     onDone?: () => void
   ): void {
     const adModule = window.CrazyGames?.SDK?.ad;
-    if (this.sdkReady && this.isCrazyGamesEnv && adModule && typeof adModule.requestAd === 'function') {
+    if (this.sdkReady && adModule && typeof adModule.requestAd === 'function') {
       this.gameplayStop();
       soundEngine.setAdPaused(true);
 

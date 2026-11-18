@@ -1,13 +1,14 @@
 {
-  "name": "react-example",
+  "name": "world-of-dungeons-forever-clicker",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
+    "build:crazygames": "VITE_PORTAL=crazygames vite build --outDir dist-cg",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
+    "clean": "rm -rf dist dist-cg server.js *.zip",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

@@ -1,8 +1,11 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { soundEngine } from '../audio/synth';
 import {
   BOSS_TIMER_SEC,
+  ENEMY_COUNTER_SKILLS,
   MONSTERS_PER_FLOOR,
   formatNumber,
+  getArenaLayout,
   getMonsterGold,
   getMonsterHp,
   getZoneForFloor,
@@ -14,7 +17,7 @@ import {
   getHandPointerSprite,
   getHeroSprite,
 } from '../game/pixelSprites';
-import { EnemyTier, HeroId } from '../game/types';
+import { ClassAttackStyle, ClassAutoSkillDef, EnemyTier, HeroId, RaceId } from '../game/types';
 
 export interface CombatEnemy {
   uid: number;
@@ -30,6 +33,11 @@ export interface CombatEnemy {
   knockbackX: number;
   spawnAnim: number;
   bobOffset: number;
+  skillCd: number;
+  skillMaxCd: number;
+  skillName: string;
+  stealRatio: number;
+  staggerCount: number;
 }
 
 interface Particle {
@@ -66,7 +74,20 @@ interface Projectile {
   progress: number;
   speed: number;
   color: string;
-  kind: 'slash' | 'bolt';
+  style: ClassAttackStyle | 'enemy_counter';
+}
+
+interface ArenaEffect {
+  active: boolean;
+  kind: 'ring' | 'beam' | 'meteor' | 'chain';
+  x: number;
+  y: number;
+  tx: number;
+  ty: number;
+  life: number;
+  maxLife: number;
+  color: string;
+  radius: number;
 }
 
 interface CoinDrop {
@@ -87,11 +108,18 @@ interface LightningBolt {
   maxLife: number;
 }
 
+export interface ClassSkillTimerState {
+  cd: number;
+  maxCd: number;
+}
+
 export interface GameCanvasHandle {
   triggerPlayerAttack: () => void;
   triggerSmite: (damage: number) => void;
+  triggerBossSecondWind: () => void;
   triggerShake: (intensity: number) => void;
   resetFloorWave: (newFloor: number) => void;
+  spawnGoldLostPopup: (goldLost: number) => void;
 }
 
 interface GameCanvasProps {
@@ -99,27 +127,39 @@ interface GameCanvasProps {
   floor: number;
   killsOnFloor: number;
   activeHero: HeroId;
+  activeRace: RaceId;
+  attackStyle: ClassAttackStyle;
+  autoSkills: [ClassAutoSkillDef, ClassAutoSkillDef];
   heroProjectileColor: string;
   tapDamage: number;
-  dps: number;
+  skillPowers: [number, number];
+  skillCdScales: [number, number];
   critChance: number;
   critMultiplier: number;
   goldMultiplier: number;
   bossDmgMultiplier: number;
+  cdScale: number;
   frenzyActive: boolean;
   damage2xActive: boolean;
+  coinWardActive: boolean;
+  haste2xActive: boolean;
   bossTimerBonusSec: number;
   showOnboardingHand: boolean;
   locale: 'en' | 'zh-TW' | 'zh-CN';
   onTapStats: (isCrit: boolean) => void;
   onEnemySlain: (goldEarned: number, isBoss: boolean, isRare: boolean) => void;
+  onEnemyCounterAttack: (stealRatio: number, enemyName: string, isBoss: boolean) => void;
+  onBossTimeoutPenalty: (stealRatio: number) => void;
+  onClassSkillBonusGold: (goldBonus: number) => void;
+  onClassSkillTimers: (timers: ClassSkillTimerState[]) => void;
   onBossTimerUpdate: (secondsLeft: number | null) => void;
 }
 
-const PARTICLE_POOL = 180;
-const TEXT_POOL = 36;
-const PROJ_POOL = 24;
-const COIN_POOL = 32;
+const PARTICLE_POOL = 200;
+const TEXT_POOL = 42;
+const PROJ_POOL = 32;
+const EFFECT_POOL = 28;
+const COIN_POOL = 36;
 const BOLT_POOL = 6;
 
 export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
@@ -129,20 +169,31 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
       floor,
       killsOnFloor,
       activeHero,
+      activeRace,
+      attackStyle,
+      autoSkills,
       heroProjectileColor,
       tapDamage,
-      dps,
+      skillPowers,
+      skillCdScales,
       critChance,
       critMultiplier,
       goldMultiplier,
       bossDmgMultiplier,
+      cdScale,
       frenzyActive,
       damage2xActive,
+      coinWardActive,
+      haste2xActive,
       bossTimerBonusSec,
       showOnboardingHand,
       locale,
       onTapStats,
       onEnemySlain,
+      onEnemyCounterAttack,
+      onBossTimeoutPenalty,
+      onClassSkillBonusGold,
+      onClassSkillTimers,
       onBossTimerUpdate,
     },
     ref
@@ -154,15 +205,22 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
       floor,
       killsOnFloor,
       activeHero,
+      activeRace,
+      attackStyle,
+      autoSkills,
       heroProjectileColor,
       tapDamage,
-      dps,
+      skillPowers,
+      skillCdScales,
       critChance,
       critMultiplier,
       goldMultiplier,
       bossDmgMultiplier,
+      cdScale,
       frenzyActive,
       damage2xActive,
+      coinWardActive,
+      haste2xActive,
       bossTimerBonusSec,
       showOnboardingHand,
       locale,
@@ -172,15 +230,22 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
       floor,
       killsOnFloor,
       activeHero,
+      activeRace,
+      attackStyle,
+      autoSkills,
       heroProjectileColor,
       tapDamage,
-      dps,
+      skillPowers,
+      skillCdScales,
       critChance,
       critMultiplier,
       goldMultiplier,
       bossDmgMultiplier,
+      cdScale,
       frenzyActive,
       damage2xActive,
+      coinWardActive,
+      haste2xActive,
       bossTimerBonusSec,
       showOnboardingHand,
       locale,
@@ -189,9 +254,21 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
     const callbacksRef = useRef({
       onTapStats,
       onEnemySlain,
+      onEnemyCounterAttack,
+      onBossTimeoutPenalty,
+      onClassSkillBonusGold,
+      onClassSkillTimers,
       onBossTimerUpdate,
     });
-    callbacksRef.current = { onTapStats, onEnemySlain, onBossTimerUpdate };
+    callbacksRef.current = {
+      onTapStats,
+      onEnemySlain,
+      onEnemyCounterAttack,
+      onBossTimeoutPenalty,
+      onClassSkillBonusGold,
+      onClassSkillTimers,
+      onBossTimerUpdate,
+    };
 
     const simRef = useRef({
       uidCounter: 1,
@@ -200,11 +277,15 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
       spawnedFloor: -1,
       heroLunge: 0,
       heroSwing: 0,
+      heroHitFlash: 0,
       shake: 0,
-      dpsAccumulator: 0,
       bossTimer: null as number | null,
       lastReportedBossSec: -1,
       pendingRespawns: [0, 0, 0],
+      trackedHero: activeHero,
+      classSkillCds: [autoSkills[0].cooldownSec, autoSkills[1].cooldownSec],
+      timerReportAccum: 0,
+      paladinShieldCharges: 0,
     });
 
     const particlesRef = useRef<Particle[]>(
@@ -246,7 +327,22 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
         progress: 0,
         speed: 6,
         color: '#93c5fd',
-        kind: 'bolt',
+        style: 'cleave',
+      }))
+    );
+
+    const effectsRef = useRef<ArenaEffect[]>(
+      Array.from({ length: EFFECT_POOL }, () => ({
+        active: false,
+        kind: 'ring',
+        x: 0,
+        y: 0,
+        tx: 0,
+        ty: 0,
+        life: 0,
+        maxLife: 0.4,
+        color: '#facc15',
+        radius: 40,
       }))
     );
 
@@ -272,26 +368,36 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
       }))
     );
 
+    const getViewportSize = () => {
+      const c = canvasRef.current;
+      return {
+        w: c && c.clientWidth > 0 ? c.clientWidth : window.innerWidth,
+        h: c && c.clientHeight > 0 ? c.clientHeight : window.innerHeight,
+      };
+    };
+
     const getArenaRect = (w: number, h: number) => {
-      const isDesktop = w >= 920;
-      const arenaW = isDesktop ? Math.max(460, w - 430) : w;
-      const arenaH = isDesktop ? h : Math.max(300, h * 0.52);
-      return { arenaW, arenaH, isDesktop };
+      const layout = getArenaLayout(w, h);
+      return {
+        arenaW: layout.arenaW,
+        arenaH: layout.arenaH,
+        isDesktop: layout.mode === 'side',
+      };
     };
 
     const getHeroPos = (arenaW: number, arenaH: number) => ({
-      x: arenaW * 0.18,
-      y: arenaH * 0.77,
+      x: arenaW * 0.17,
+      y: arenaH * 0.75,
     });
 
     const getSlotPos = (slot: number, isBoss: boolean, arenaW: number, arenaH: number) => {
       if (isBoss) {
-        return { x: arenaW * 0.67, y: arenaH * 0.74 };
+        return { x: arenaW * 0.66, y: arenaH * 0.73 };
       }
       const coords = [
-        { x: arenaW * 0.49, y: arenaH * 0.79 },
-        { x: arenaW * 0.67, y: arenaH * 0.71 },
-        { x: arenaW * 0.83, y: arenaH * 0.8 },
+        { x: arenaW * 0.48, y: arenaH * 0.77 },
+        { x: arenaW * 0.67, y: arenaH * 0.70 },
+        { x: arenaW * 0.84, y: arenaH * 0.78 },
       ];
       return coords[slot % 3];
     };
@@ -327,7 +433,7 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
           pool[i].y = y - 16;
           pool[i].vy = -68 - Math.random() * 18;
           pool[i].life = 0;
-          pool[i].maxLife = 0.8;
+          pool[i].maxLife = 0.82;
           pool[i].text = text;
           pool[i].color = color;
           pool[i].scale = scale;
@@ -353,34 +459,80 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
       }
     };
 
-    const spawnProjectile = (tx: number, ty: number, isCrit: boolean) => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
+    const spawnArenaEffect = (
+      kind: ArenaEffect['kind'],
+      x: number,
+      y: number,
+      tx: number,
+      ty: number,
+      color: string,
+      radius = 42,
+      maxLife = 0.38
+    ) => {
+      const pool = effectsRef.current;
+      for (let i = 0; i < pool.length; i++) {
+        if (!pool[i].active) {
+          pool[i].active = true;
+          pool[i].kind = kind;
+          pool[i].x = x;
+          pool[i].y = y;
+          pool[i].tx = tx;
+          pool[i].ty = ty;
+          pool[i].life = 0;
+          pool[i].maxLife = maxLife;
+          pool[i].color = color;
+          pool[i].radius = radius;
+          break;
+        }
+      }
+    };
+
+    const spawnProjectile = (
+      tx: number,
+      ty: number,
+      isCrit: boolean,
+      overrideStyle?: ClassAttackStyle | 'enemy_counter',
+      overrideColor?: string,
+      fromX?: number,
+      fromY?: number
+    ) => {
+      const { w, h } = getViewportSize();
       const { arenaW, arenaH } = getArenaRect(w, h);
       const heroPos = getHeroPos(arenaW, arenaH);
-      const hero = propsRef.current.activeHero;
-      const kind =
-        hero === 'hunter' ||
-        hero === 'mage' ||
-        hero === 'warlock' ||
-        hero === 'priest' ||
-        hero === 'shaman' ||
-        hero === 'druid'
-          ? 'bolt'
-          : 'slash';
+      const style = overrideStyle ?? propsRef.current.attackStyle;
+      const color =
+        overrideColor ?? (isCrit ? '#facc15' : propsRef.current.heroProjectileColor);
+
+      // Instant / impact ring & beam effects per class primary attack
+      if (style === 'holy_beam' || style === 'moonfire') {
+        spawnArenaEffect('beam', tx, 0, tx, ty - 14, color, isCrit ? 22 : 14, 0.32);
+        spawnArenaEffect('ring', tx, ty - 14, tx, ty - 14, color, isCrit ? 48 : 34, 0.28);
+      } else if (style === 'lightning') {
+        spawnArenaEffect('chain', heroPos.x + 22, heroPos.y - 36, tx, ty - 34, color, 8, 0.28);
+        spawnArenaEffect('ring', tx, ty - 28, tx, ty - 28, '#bae6fd', 32, 0.24);
+      } else if (style === 'hammer_wave') {
+        spawnArenaEffect('ring', tx, ty - 14, tx, ty - 14, '#facc15', isCrit ? 52 : 36, 0.3);
+      }
 
       const pool = projRef.current;
       for (let i = 0; i < pool.length; i++) {
         if (!pool[i].active) {
           pool[i].active = true;
-          pool[i].x = heroPos.x + 22;
-          pool[i].y = heroPos.y - 34;
+          pool[i].x = fromX ?? heroPos.x + 22;
+          pool[i].y = fromY ?? heroPos.y - 34;
           pool[i].tx = tx;
           pool[i].ty = ty - 34;
           pool[i].progress = 0;
-          pool[i].speed = kind === 'bolt' ? 7.5 : 10;
-          pool[i].color = isCrit ? '#facc15' : propsRef.current.heroProjectileColor;
-          pool[i].kind = kind;
+          pool[i].speed =
+            style === 'arrow'
+              ? 11
+              : style === 'cleave' || style === 'dual_slash' || style === 'hammer_wave'
+              ? 9.5
+              : style === 'enemy_counter'
+              ? 4.8
+              : 7.5;
+          pool[i].color = color;
+          pool[i].style = style;
           break;
         }
       }
@@ -400,6 +552,11 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
 
       const isRare = tier === 'rare' || tier === 'rare_elite';
       const maxHp = getMonsterHp(floorNum, boss, isRare);
+      const counterDef =
+        ENEMY_COUNTER_SKILLS[boss ? 'boss' : isRare ? 'rare' : 'normal'];
+      const cdJitter = boss ? 0 : (slot * 1.4 + Math.random() * 1.8);
+      const maxCd = Math.max(4.8, counterDef.cooldownSec + cdJitter - Math.min(1.5, floorNum * 0.02));
+
       return {
         uid: simRef.current.uidCounter++,
         slot,
@@ -414,6 +571,11 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
         knockbackX: 0,
         spawnAnim: 1,
         bobOffset: slot * 1.9 + Math.random() * 1.2,
+        skillCd: maxCd * (0.65 + Math.random() * 0.35),
+        skillMaxCd: maxCd,
+        skillName: counterDef.name[propsRef.current.locale],
+        stealRatio: counterDef.stealRatio,
+        staggerCount: 0,
       };
     };
 
@@ -442,10 +604,10 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
       enemy: CombatEnemy,
       rawDamage: number,
       isCrit: boolean,
-      showFloatText: boolean
+      showFloatText: boolean,
+      vfxColor?: string
     ) => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
+      const { w, h } = getViewportSize();
       const { arenaW, arenaH } = getArenaRect(w, h);
       const pos = getSlotPos(enemy.slot, enemy.isBoss, arenaW, arenaH);
 
@@ -456,15 +618,15 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
 
       if (showFloatText) {
         const text = isCrit ? `CRIT ${formatNumber(effectiveDmg)}!` : `${formatNumber(effectiveDmg)}`;
-        const color = isCrit ? '#facc15' : '#ffffff';
-        spawnFloatingText(pos.x, pos.y - (enemy.isBoss ? 110 : 72), text, color, isCrit ? 1.35 : 1);
+        const color = isCrit ? '#facc15' : vfxColor || '#ffffff';
+        spawnFloatingText(pos.x, pos.y - (enemy.isBoss ? 110 : 72), text, color, isCrit ? 1.32 : 1);
       }
 
       spawnParticles(
         pos.x,
         pos.y - 36,
         isCrit ? 14 : 6,
-        isCrit ? '#facc15' : propsRef.current.heroProjectileColor,
+        vfxColor || (isCrit ? '#facc15' : propsRef.current.heroProjectileColor),
         320
       );
 
@@ -484,7 +646,6 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
           simRef.current.shake = Math.max(simRef.current.shake, 11);
         }
 
-        // Remove slain enemy & schedule replacement if same regular floor continues
         const s = simRef.current;
         s.enemies = s.enemies.filter((e) => e.uid !== enemy.uid);
 
@@ -492,17 +653,86 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
         const willAdvanceFloor = enemy.isBoss || nextKills >= MONSTERS_PER_FLOOR;
 
         if (!willAdvanceFloor && !enemy.isBoss) {
-          // Respawn slot in 0.22s (or immediately if none left)
           s.pendingRespawns[enemy.slot] = s.enemies.length === 0 ? 0.05 : 0.22;
         }
 
-        // Auto-select next living enemy
         if (s.enemies.length > 0) {
           s.targetSlot = s.enemies[0].slot;
         }
 
         callbacksRef.current.onEnemySlain(goldDrop, enemy.isBoss, isRare);
       }
+    };
+
+    const triggerClassAutoSkill = (
+      skill: ClassAutoSkillDef,
+      skillIndex: number,
+      arenaW: number,
+      arenaH: number
+    ) => {
+      const s = simRef.current;
+      const p = propsRef.current;
+      if (s.enemies.length === 0) return;
+
+      const heroPos = getHeroPos(arenaW, arenaH);
+      soundEngine.playClassAutoSkill(skill.aoe);
+      s.heroLunge = Math.max(s.heroLunge, 0.8);
+      s.heroSwing = Math.max(s.heroSwing, 0.9);
+
+      spawnFloatingText(heroPos.x, heroPos.y - 92, `${skill.name[p.locale]}!`, skill.color, 0.95);
+
+      const targets = skill.aoe
+        ? [...s.enemies]
+        : [s.enemies.find((e) => e.slot === s.targetSlot) || s.enemies[0]];
+
+      // Apply special utility perks
+      if (skill.special === 'shield') {
+        s.paladinShieldCharges = Math.min(2, s.paladinShieldCharges + 1);
+        spawnFloatingText(heroPos.x, heroPos.y - 114, 'WARD +1', '#fde047', 0.9);
+      }
+      if (skill.special === 'gold_steal') {
+        const bonus = Math.max(2, Math.floor(getMonsterGold(p.floor, false, false) * p.goldMultiplier * 0.65));
+        callbacksRef.current.onClassSkillBonusGold(bonus);
+        spawnCoins(heroPos.x + 12, heroPos.y - 36, 4);
+        spawnFloatingText(heroPos.x, heroPos.y - 114, `+${formatNumber(bonus)}g`, '#fde047', 0.95);
+      }
+
+      // Render skill-specific pixel VFX + damage
+      if (skill.effect === 'whirlwind' || skill.effect === 'consecrate' || skill.effect === 'shadow_aoe') {
+        const center = getSlotPos(1, false, arenaW, arenaH);
+        spawnArenaEffect('ring', center.x, center.y - 18, center.x, center.y - 18, skill.color, 130, 0.42);
+      }
+
+      const baseSkillPower = p.skillPowers[skillIndex] ?? p.skillPowers[0];
+
+      targets.forEach((enemy, idx) => {
+        const pos = getSlotPos(enemy.slot, enemy.isBoss, arenaW, arenaH);
+        const isCrit = skill.special === 'crit_guaranteed' || Math.random() < p.critChance;
+        let dmg = Math.max(2, baseSkillPower * skill.damageMult);
+        if (isCrit) dmg *= p.critMultiplier;
+        if (skill.special === 'boss_bonus' && enemy.isBoss) dmg *= 1.4;
+
+        if (skill.effect === 'rain_of_fire' || skill.effect === 'starfall') {
+          spawnArenaEffect('meteor', pos.x - 45, 0, pos.x, pos.y - 30, skill.color, 18, 0.38);
+        } else if (skill.effect === 'moonfire' || skill.effect === 'holy') {
+          spawnArenaEffect('beam', pos.x, 0, pos.x, pos.y - 10, skill.color, 18, 0.35);
+        } else if (skill.effect === 'lightning') {
+          const prev = idx === 0 ? { x: heroPos.x + 22, y: heroPos.y - 36 } : getSlotPos(targets[idx - 1].slot, targets[idx - 1].isBoss, arenaW, arenaH);
+          spawnArenaEffect('chain', prev.x, prev.y - (idx === 0 ? 0 : 30), pos.x, pos.y - 30, skill.color, 10, 0.3);
+        } else if (skill.effect === 'lava') {
+          spawnArenaEffect('ring', pos.x, pos.y - 14, pos.x, pos.y - 14, '#f97316', 54, 0.38);
+          spawnParticles(pos.x, pos.y - 24, 18, '#fb923c', 360);
+        } else {
+          spawnProjectile(pos.x, pos.y, isCrit, p.attackStyle, skill.color);
+        }
+
+        if (skill.special === 'chill') {
+          enemy.skillCd = Math.min(enemy.skillMaxCd, enemy.skillCd + 2.2);
+          spawnFloatingText(pos.x, pos.y - 98, 'CHILL', '#7dd3fc', 0.85);
+        }
+
+        applyDamageToEnemy(enemy, dmg, isCrit, true, skill.color);
+      });
     };
 
     const performTapAttack = (preferredSlot?: number) => {
@@ -520,6 +750,16 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
       }
       s.targetSlot = target.slot;
 
+      // Interrupt / stagger enemy cast bar slightly if player actively clicks a telegraphing enemy
+      if (target.skillCd <= 1.8 && target.staggerCount < 3) {
+        target.skillCd = Math.min(target.skillMaxCd, target.skillCd + 0.45);
+        target.staggerCount += 1;
+        const { w, h } = getViewportSize();
+        const { arenaW, arenaH } = getArenaRect(w, h);
+        const tPos = getSlotPos(target.slot, target.isBoss, arenaW, arenaH);
+        spawnFloatingText(tPos.x, tPos.y - 102, 'STAGGER!', '#38bdf8', 0.85);
+      }
+
       const isCrit = Math.random() < propsRef.current.critChance;
       const dmg = Math.max(
         1,
@@ -532,8 +772,7 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
         s.shake = Math.max(s.shake, 6);
       }
 
-      const w = window.innerWidth;
-      const h = window.innerHeight;
+      const { w, h } = getViewportSize();
       const { arenaW, arenaH } = getArenaRect(w, h);
       const pos = getSlotPos(target.slot, target.isBoss, arenaW, arenaH);
       spawnProjectile(pos.x, pos.y, isCrit);
@@ -549,8 +788,7 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
       triggerSmite(damage: number) {
         const s = simRef.current;
         if (s.enemies.length === 0) return;
-        const w = window.innerWidth;
-        const h = window.innerHeight;
+        const { w, h } = getViewportSize();
         const { arenaW, arenaH } = getArenaRect(w, h);
         s.shake = Math.max(s.shake, 13);
 
@@ -567,11 +805,35 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
           applyDamageToEnemy(enemy, damage, true, true);
         });
       },
+      triggerBossSecondWind() {
+        const s = simRef.current;
+        if (s.bossTimer !== null) {
+          s.bossTimer += 15;
+          callbacksRef.current.onBossTimerUpdate(Math.ceil(s.bossTimer));
+        }
+        const boss = s.enemies.find((e) => e.isBoss);
+        if (boss) {
+          const { w, h } = getViewportSize();
+          const { arenaW, arenaH } = getArenaRect(w, h);
+          const pos = getSlotPos(boss.slot, true, arenaW, arenaH);
+          spawnArenaEffect('beam', pos.x, 0, pos.x, pos.y - 10, '#fde047', 26, 0.45);
+          s.shake = Math.max(s.shake, 10);
+          applyDamageToEnemy(boss, Math.max(10, boss.maxHp * 0.25), true, true, '#fde047');
+        }
+      },
       triggerShake(intensity: number) {
         simRef.current.shake = Math.max(simRef.current.shake, intensity);
       },
       resetFloorWave(newFloor: number) {
         initFloorWave(newFloor);
+      },
+      spawnGoldLostPopup(goldLost: number) {
+        if (goldLost <= 0) return;
+        const { w, h } = getViewportSize();
+        const { arenaW, arenaH } = getArenaRect(w, h);
+        const heroPos = getHeroPos(arenaW, arenaH);
+        spawnFloatingText(heroPos.x, heroPos.y - 104, `-${formatNumber(goldLost)}g`, '#f87171', 1.2);
+        spawnParticles(heroPos.x, heroPos.y - 42, 14, '#ef4444', 320);
       },
     }));
 
@@ -583,6 +845,22 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [floor]);
 
+    // Reset Class Auto-Skill cooldowns when player switches active Hero Class
+    useEffect(() => {
+      const s = simRef.current;
+      if (s.trackedHero !== activeHero) {
+        s.trackedHero = activeHero;
+        s.paladinShieldCharges = 0;
+        const max0 = Math.max(1.0, autoSkills[0].cooldownSec * skillCdScales[0]);
+        const max1 = Math.max(1.0, autoSkills[1].cooldownSec * skillCdScales[1]);
+        s.classSkillCds = [max0 * 0.6, max1 * 0.8];
+        callbacksRef.current.onClassSkillTimers([
+          { cd: s.classSkillCds[0], maxCd: max0 },
+          { cd: s.classSkillCds[1], maxCd: max1 },
+        ]);
+      }
+    }, [activeHero, autoSkills, skillCdScales]);
+
     const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
       if (!propsRef.current.isPlaying) return;
       const canvas = canvasRef.current;
@@ -592,10 +870,8 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
       const py = e.clientY - rect.top;
       const { arenaW, arenaH } = getArenaRect(rect.width, rect.height);
 
-      // Ignore clicks outside the dungeon arena (dock panel handles its own clicks)
       if (px > arenaW || py > arenaH) return;
 
-      // Check if user tapped a specific enemy
       const s = simRef.current;
       let hitSlot: number | undefined;
       for (const enemy of s.enemies) {
@@ -622,26 +898,24 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
 
       const resize = () => {
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const w = window.innerWidth;
-        const h = window.innerHeight;
-        canvas.width = w * dpr;
-        canvas.height = h * dpr;
-        canvas.style.width = `${w}px`;
-        canvas.style.height = `${h}px`;
+        const w = Math.max(1, canvas.clientWidth || window.innerWidth);
+        const h = Math.max(1, canvas.clientHeight || window.innerHeight);
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       };
 
       resize();
       window.addEventListener('resize', resize);
+      const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(resize) : null;
+      ro?.observe(canvas);
 
       const drawPixelTorch = (x: number, y: number, timeSec: number, color: string) => {
-        // Wooden & iron bracket
         ctx.fillStyle = '#475569';
         ctx.fillRect(x - 6, y + 6, 12, 8);
         ctx.fillStyle = '#78350f';
         ctx.fillRect(x - 4, y - 4, 8, 12);
 
-        // Warm glow halo
         const flicker = Math.sin(timeSec * 13 + x) * 3;
         const grad = ctx.createRadialGradient(x, y - 10, 4, x, y - 10, 56 + flicker);
         grad.addColorStop(0, `${color}55`);
@@ -651,7 +925,6 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
         ctx.arc(x, y - 10, 58 + flicker, 0, Math.PI * 2);
         ctx.fill();
 
-        // Pixel flame blocks
         const fShift = Math.round(Math.sin(timeSec * 16 + x) * 2);
         ctx.fillStyle = color;
         ctx.fillRect(x - 6, y - 16, 12, 12);
@@ -662,7 +935,6 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
       };
 
       const drawDungeonProps = (arenaW: number, groundY: number, zoneBanner: string) => {
-        // Wall Banner left
         const bx = Math.round(arenaW * 0.24);
         const by = Math.round(groundY * 0.2);
         ctx.fillStyle = '#0b0e14';
@@ -673,7 +945,6 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
         ctx.fillRect(bx - 28, by + 4, 56, 4);
         ctx.fillRect(bx - 28, by + 4, 4, 80);
         ctx.fillRect(bx + 24, by + 4, 4, 80);
-        // Pixel skull emblem on banner
         ctx.fillStyle = '#f8fafc';
         ctx.fillRect(bx - 10, by + 26, 20, 16);
         ctx.fillRect(bx - 6, by + 42, 12, 8);
@@ -681,7 +952,6 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
         ctx.fillRect(bx - 6, by + 32, 4, 4);
         ctx.fillRect(bx + 2, by + 32, 4, 4);
 
-        // Wooden crate & barrel on far left floor
         const cx = Math.round(arenaW * 0.04);
         const cy = Math.round(groundY - 46);
         ctx.fillStyle = '#0b0e14';
@@ -694,7 +964,6 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
         ctx.fillRect(cx + 4, cy + 19, 36, 5);
         ctx.fillRect(cx + 19, cy + 4, 5, 36);
 
-        // Barrel next to crate
         const barX = cx + 50;
         const barY = Math.round(groundY - 38);
         ctx.fillStyle = '#0b0e14';
@@ -714,18 +983,17 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
 
         const p = propsRef.current;
         const s = simRef.current;
-        const w = window.innerWidth;
-        const h = window.innerHeight;
+        const { w, h } = getViewportSize();
         const { arenaW, arenaH } = getArenaRect(w, h);
-        const groundY = Math.round(arenaH * 0.78);
+        const groundY = Math.round(arenaH * 0.76);
 
-        // Update simulation
+        // Decay animations
         s.heroLunge = Math.max(0, s.heroLunge - dt * 6);
         s.heroSwing = Math.max(0, s.heroSwing - dt * 5);
+        s.heroHitFlash = Math.max(0, s.heroHitFlash - dt);
         s.shake = Math.max(0, s.shake - dt * 28);
 
         if (p.isPlaying) {
-          // Ensure floor wave exists
           if (s.spawnedFloor !== p.floor) {
             initFloorWave(p.floor);
           }
@@ -745,7 +1013,7 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
             }
           }
 
-          // Boss countdown timer
+          // Boss countdown timer & penalty on timeout
           if (s.bossTimer !== null && s.enemies.length > 0) {
             s.bossTimer -= dt;
             const ceilSec = Math.max(0, Math.ceil(s.bossTimer));
@@ -754,27 +1022,87 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
               callbacksRef.current.onBossTimerUpdate(ceilSec);
             }
             if (s.bossTimer <= 0) {
-              // Boss escaped/enraged -> reset Boss HP & restart timer so player can keep farming
               const boss = s.enemies[0];
               if (boss) {
                 boss.hp = boss.maxHp;
-                boss.hitFlash = 0.2;
+                boss.hitFlash = 0.25;
               }
               s.bossTimer = BOSS_TIMER_SEC + p.bossTimerBonusSec;
+              s.shake = Math.max(s.shake, 10);
+              if (p.coinWardActive) {
+                const heroPos = getHeroPos(arenaW, arenaH);
+                spawnFloatingText(heroPos.x, heroPos.y - 96, 'WARDED!', '#38bdf8', 1.1);
+                soundEngine.playShieldBlock();
+              } else {
+                soundEngine.playEnemyCounter();
+                callbacksRef.current.onBossTimeoutPenalty(0.15);
+              }
             }
           }
 
-          // Passive Auto-Attack DPS ticks (5Hz visual strike + damage)
-          if (p.dps > 0 && s.enemies.length > 0) {
-            s.dpsAccumulator += dt;
-            if (s.dpsAccumulator >= 0.25) {
-              const stepDmg = p.dps * s.dpsAccumulator;
-              s.dpsAccumulator = 0;
-              const target = s.enemies.find((e) => e.slot === s.targetSlot) || s.enemies[0];
-              if (target) {
-                const pos = getSlotPos(target.slot, target.isBoss, arenaW, arenaH);
-                spawnProjectile(pos.x, pos.y, false);
-                applyDamageToEnemy(target, stepDmg, false, true);
+          // Class Countdown Auto-Skills (each class skill scales independently!)
+          const maxCd0 = Math.max(1.0, p.autoSkills[0].cooldownSec * p.skillCdScales[0]);
+          const maxCd1 = Math.max(1.0, p.autoSkills[1].cooldownSec * p.skillCdScales[1]);
+          const maxCds = [maxCd0, maxCd1];
+          if (s.enemies.length > 0) {
+            for (let i = 0; i < 2; i++) {
+              const sk = p.autoSkills[i];
+              s.classSkillCds[i] -= dt;
+              if (s.classSkillCds[i] <= 0) {
+                s.classSkillCds[i] = maxCds[i];
+                triggerClassAutoSkill(sk, i, arenaW, arenaH);
+              }
+            }
+          }
+
+          s.timerReportAccum += dt;
+          if (s.timerReportAccum >= 0.1) {
+            s.timerReportAccum = 0;
+            callbacksRef.current.onClassSkillTimers([
+              {
+                cd: Math.max(0, s.classSkillCds[0]),
+                maxCd: maxCd0,
+              },
+              {
+                cd: Math.max(0, s.classSkillCds[1]),
+                maxCd: maxCd1,
+              },
+            ]);
+          }
+
+          // Enemy Counter-Attack Cooldown Skills (steal coins!)
+          const heroPos = getHeroPos(arenaW, arenaH);
+          for (const enemy of s.enemies) {
+            enemy.skillCd -= dt;
+            if (enemy.skillCd <= 0) {
+              enemy.skillCd = enemy.skillMaxCd;
+              enemy.staggerCount = 0;
+              enemy.knockbackX = -10;
+
+              const ePos = getSlotPos(enemy.slot, enemy.isBoss, arenaW, arenaH);
+              spawnFloatingText(ePos.x, ePos.y - (enemy.isBoss ? 115 : 82), `${enemy.skillName}!`, '#fb7185', 0.9);
+              spawnProjectile(
+                heroPos.x,
+                heroPos.y,
+                false,
+                'enemy_counter',
+                '#f43f5e',
+                ePos.x - 18,
+                ePos.y - 34
+              );
+
+              if (p.coinWardActive || s.paladinShieldCharges > 0) {
+                if (!p.coinWardActive && s.paladinShieldCharges > 0) {
+                  s.paladinShieldCharges -= 1;
+                }
+                soundEngine.playShieldBlock();
+                spawnFloatingText(heroPos.x, heroPos.y - 92, 'BLOCKED!', '#38bdf8', 1.05);
+                spawnParticles(heroPos.x + 12, heroPos.y - 38, 10, '#38bdf8', 180);
+              } else {
+                s.heroHitFlash = 0.2;
+                s.shake = Math.max(s.shake, enemy.isBoss ? 9 : 5);
+                soundEngine.playEnemyCounter();
+                callbacksRef.current.onEnemyCounterAttack(enemy.stealRatio, enemy.name, enemy.isBoss);
               }
             }
           }
@@ -783,7 +1111,11 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
         // Update enemies
         for (const enemy of s.enemies) {
           enemy.hitFlash = Math.max(0, enemy.hitFlash - dt);
-          enemy.knockbackX = Math.max(0, enemy.knockbackX - dt * 55);
+          if (enemy.knockbackX > 0) {
+            enemy.knockbackX = Math.max(0, enemy.knockbackX - dt * 55);
+          } else if (enemy.knockbackX < 0) {
+            enemy.knockbackX = Math.min(0, enemy.knockbackX + dt * 55);
+          }
           enemy.spawnAnim = Math.max(0, enemy.spawnAnim - dt * 4.5);
         }
 
@@ -792,6 +1124,13 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
           if (!pr.active) continue;
           pr.progress += dt * pr.speed;
           if (pr.progress >= 1) pr.active = false;
+        }
+
+        // Update arena effects
+        for (const ef of effectsRef.current) {
+          if (!ef.active) continue;
+          ef.life += dt;
+          if (ef.life >= ef.maxLife) ef.active = false;
         }
 
         // Update coins
@@ -853,11 +1192,9 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
 
         const { zone } = getZoneForFloor(p.floor);
 
-        // Full canvas dark frame
         ctx.fillStyle = '#0e1017';
         ctx.fillRect(0, 0, w, h);
 
-        // Clip to Arena Region
         ctx.save();
         ctx.beginPath();
         ctx.rect(0, 0, arenaW, arenaH);
@@ -903,34 +1240,30 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
         ctx.fillRect(0, groundY + 34, arenaW, 3);
         ctx.fillRect(0, groundY + 74, arenaW, 3);
 
-        // Props & Wall Torches
         drawDungeonProps(arenaW, groundY, zone.bannerColor);
         drawPixelTorch(Math.round(arenaW * 0.1), Math.round(groundY * 0.43), timeSec, zone.torchColor);
         drawPixelTorch(Math.round(arenaW * 0.37), Math.round(groundY * 0.36), timeSec, zone.torchColor);
         drawPixelTorch(Math.round(arenaW * 0.78), Math.round(groundY * 0.39), timeSec, zone.torchColor);
 
-        // 2X Damage or Frenzy ambient floor tint
         if (p.damage2xActive || p.frenzyActive) {
           ctx.fillStyle = p.frenzyActive ? 'rgba(249, 115, 22, 0.08)' : 'rgba(250, 204, 21, 0.06)';
           ctx.fillRect(0, 0, arenaW, arenaH);
         }
 
-        // HERO RENDERING
+        // HERO RENDERING (with Racial Appearance!)
         const heroPos = getHeroPos(arenaW, arenaH);
-        const heroSprite = getHeroSprite(p.activeHero);
-        const heroScale = Math.max(4, Math.min(5.5, arenaW / 145));
+        const heroSprite = getHeroSprite(p.activeHero, p.activeRace);
+        const heroScale = Math.max(2.6, Math.min(5.0, arenaW / 160, arenaH / 108));
         const heroDrawW = heroSprite.width * heroScale;
         const heroDrawH = heroSprite.height * heroScale;
         const heroBob = Math.round(Math.sin(timeSec * 4.2) * 2);
         const lungePx = Math.round(s.heroLunge * 22);
 
-        // Hero shadow
         ctx.fillStyle = 'rgba(0,0,0,0.48)';
         ctx.beginPath();
         ctx.ellipse(heroPos.x + lungePx, heroPos.y + 4, heroDrawW * 0.42, 8, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Hero buff ring when Frenzy or 2X is active
         if (p.frenzyActive || p.damage2xActive) {
           ctx.strokeStyle = p.frenzyActive ? '#f97316' : '#facc15';
           ctx.lineWidth = 3;
@@ -939,6 +1272,22 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
           ctx.stroke();
         }
 
+        // Coin Ward or Paladin Shield Dome around Hero
+        if (p.coinWardActive || s.paladinShieldCharges > 0) {
+          ctx.save();
+          ctx.strokeStyle = p.coinWardActive ? '#38bdf8' : '#fde047';
+          ctx.lineWidth = 2.5;
+          ctx.globalAlpha = 0.65 + Math.sin(timeSec * 6) * 0.2;
+          ctx.beginPath();
+          ctx.arc(heroPos.x + lungePx, heroPos.y - heroDrawH * 0.45, heroDrawW * 0.62, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        ctx.save();
+        if (s.heroHitFlash > 0) {
+          ctx.filter = 'sepia(1) hue-rotate(-50deg) saturate(4)';
+        }
         ctx.drawImage(
           heroSprite,
           Math.round(heroPos.x - heroDrawW / 2 + lungePx),
@@ -946,6 +1295,7 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
           Math.round(heroDrawW),
           Math.round(heroDrawH)
         );
+        ctx.restore();
 
         // ENEMIES RENDERING
         const sortedEnemies = [...s.enemies].sort((a, b) => a.slot - b.slot);
@@ -953,40 +1303,40 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
           const pos = getSlotPos(enemy.slot, enemy.isBoss, arenaW, arenaH);
           const sprite = getEnemySprite(enemy.spriteId);
           const isRare = enemy.tier === 'rare' || enemy.tier === 'rare_elite';
-          const baseScale = Math.max(3.8, Math.min(5.2, arenaW / 150));
+          const baseScale = Math.max(2.8, Math.min(5.2, arenaW / 150, arenaH / 102));
           const scale =
             baseScale *
-            (enemy.isBoss ? 1.45 : isRare ? 1.14 : 1) *
+            (enemy.isBoss ? 1.42 : isRare ? 1.14 : 1) *
             (1 - enemy.spawnAnim * 0.35);
           const drawW = sprite.width * scale;
           const drawH = sprite.height * scale;
           const bob = Math.round(Math.sin(timeSec * 4 + enemy.bobOffset) * 2.5);
           const ex = Math.round(pos.x + enemy.knockbackX);
           const ey = Math.round(pos.y);
+          const isTelegraphing = enemy.skillCd <= 1.8;
 
-          // Rare / Target Ring under enemy
           const isTarget = enemy.slot === s.targetSlot;
-          if (isTarget || isRare) {
-            ctx.strokeStyle = enemy.isBoss
+          if (isTarget || isRare || isTelegraphing) {
+            ctx.strokeStyle = isTelegraphing
+              ? '#fb7185'
+              : enemy.isBoss
               ? '#facc15'
               : enemy.tier === 'rare_elite'
               ? '#c084fc'
               : enemy.tier === 'rare'
               ? '#38bdf8'
               : '#ef4444';
-            ctx.lineWidth = isTarget ? 3 : 2;
+            ctx.lineWidth = isTelegraphing ? 3.5 : isTarget ? 3 : 2;
             ctx.beginPath();
             ctx.ellipse(ex, ey + 4, drawW * 0.54, 11, 0, 0, Math.PI * 2);
             ctx.stroke();
           }
 
-          // Enemy Shadow
           ctx.fillStyle = 'rgba(0,0,0,0.48)';
           ctx.beginPath();
           ctx.ellipse(ex, ey + 4, drawW * 0.4, 8, 0, 0, Math.PI * 2);
           ctx.fill();
 
-          // Enemy Sprite
           ctx.save();
           if (enemy.hitFlash > 0) {
             ctx.filter = 'brightness(2.4)';
@@ -1000,11 +1350,11 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
           );
           ctx.restore();
 
-          // Enemy HP Bar
+          // Enemy HP Bar + Counter-Skill Cooldown Bar underneath
           const barW = enemy.isBoss ? 136 : isRare ? 88 : 74;
           const barH = enemy.isBoss ? 12 : 9;
           const barX = Math.round(ex - barW / 2);
-          const barY = Math.round(ey - drawH - (enemy.isBoss ? 24 : 16));
+          const barY = Math.round(ey - drawH - (enemy.isBoss ? 28 : 20));
           const hpRatio = Math.max(0, Math.min(1, enemy.hp / enemy.maxHp));
 
           ctx.fillStyle = '#090b10';
@@ -1020,6 +1370,23 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
             : '#ef4444';
           ctx.fillRect(barX, barY, Math.round(barW * hpRatio), barH);
 
+          // Enemy Counter-Attack Cast Progress Bar (right below HP bar)
+          const castProgress = Math.max(0, Math.min(1, 1 - enemy.skillCd / enemy.skillMaxCd));
+          const castBarY = barY + barH + 2;
+          ctx.fillStyle = '#090b10';
+          ctx.fillRect(barX - 1, castBarY - 1, barW + 2, 5);
+          ctx.fillStyle = isTelegraphing ? '#fb7185' : '#a855f7';
+          ctx.fillRect(barX, castBarY, Math.round(barW * castProgress), 3);
+
+          if (isTelegraphing) {
+            ctx.font = '700 10px "Pixelify Sans", monospace';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#090b10';
+            ctx.fillText(`! ${enemy.skillCd.toFixed(1)}s`, ex + 1, barY - (enemy.isBoss || isRare ? 19 : 6));
+            ctx.fillStyle = '#fda4af';
+            ctx.fillText(`! ${enemy.skillCd.toFixed(1)}s`, ex, barY - (enemy.isBoss || isRare ? 20 : 7));
+          }
+
           if (enemy.isBoss || isRare) {
             const label =
               enemy.tier === 'rare_elite'
@@ -1030,17 +1397,17 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
             ctx.font = `700 ${enemy.isBoss ? 13 : 11}px "Pixelify Sans", monospace`;
             ctx.textAlign = 'center';
             ctx.fillStyle = '#090b10';
-            ctx.fillText(label, ex + 1, barY - 7);
+            ctx.fillText(label, ex + 1, barY - 6);
             ctx.fillStyle = enemy.isBoss
               ? '#fde047'
               : enemy.tier === 'rare_elite'
               ? '#e879f9'
               : '#7dd3fc';
-            ctx.fillText(label, ex, barY - 8);
+            ctx.fillText(label, ex, barY - 7);
           }
         }
 
-        // Onboarding Pixel Hand pointing at front enemy
+        // Onboarding Pixel Hand
         if (p.showOnboardingHand && s.enemies.length > 0) {
           const target = s.enemies.find((e) => e.slot === s.targetSlot) || s.enemies[0];
           const tPos = getSlotPos(target.slot, target.isBoss, arenaW, arenaH);
@@ -1049,28 +1416,142 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
           ctx.drawImage(hand, Math.round(tPos.x - 16), Math.round(tPos.y - 115 + hBob), 44, 48);
         }
 
-        // Projectiles / Slash Arcs
+        // Arena Effects (Beams, Whirlwind Rings, Meteors, Chain Lightning)
+        for (const ef of effectsRef.current) {
+          if (!ef.active) continue;
+          const progress = ef.life / ef.maxLife;
+          const alpha = Math.max(0, 1 - progress);
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          if (ef.kind === 'ring') {
+            ctx.strokeStyle = ef.color;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.ellipse(
+              ef.x,
+              ef.y,
+              Math.max(8, ef.radius * (0.4 + progress * 0.8)),
+              Math.max(4, ef.radius * 0.25 * (0.4 + progress * 0.8)),
+              0,
+              0,
+              Math.PI * 2
+            );
+            ctx.stroke();
+          } else if (ef.kind === 'beam') {
+            ctx.fillStyle = ef.color;
+            ctx.fillRect(Math.round(ef.tx - ef.radius * 0.45), 0, Math.round(ef.radius * 0.9), Math.round(ef.ty));
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(Math.round(ef.tx - 3), 0, 6, Math.round(ef.ty));
+          } else if (ef.kind === 'meteor') {
+            const mx = ef.x + (ef.tx - ef.x) * Math.min(1, progress * 1.4);
+            const my = ef.y + (ef.ty - ef.y) * Math.min(1, progress * 1.4);
+            ctx.fillStyle = ef.color;
+            ctx.fillRect(Math.round(mx - 7), Math.round(my - 7), 14, 14);
+            ctx.fillStyle = '#fef08a';
+            ctx.fillRect(Math.round(mx - 4), Math.round(my - 4), 8, 8);
+          } else if (ef.kind === 'chain') {
+            ctx.strokeStyle = ef.color;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            const midX = (ef.x + ef.tx) / 2;
+            const midY = (ef.y + ef.ty) / 2 - 18;
+            ctx.moveTo(ef.x, ef.y);
+            ctx.lineTo(midX - 10, midY);
+            ctx.lineTo(midX + 12, midY + 14);
+            ctx.lineTo(ef.tx, ef.ty);
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        // Per-Class Projectiles & Primary Attack VFX
         for (const pr of projRef.current) {
           if (!pr.active) continue;
-          if (pr.kind === 'bolt') {
-            const cx = pr.x + (pr.tx - pr.x) * pr.progress;
-            const cy = pr.y + (pr.ty - pr.y) * pr.progress;
+          const cx = pr.x + (pr.tx - pr.x) * pr.progress;
+          const cy = pr.y + (pr.ty - pr.y) * pr.progress;
+          const alpha = Math.max(0, 1 - pr.progress * 0.65);
+          ctx.save();
+          ctx.globalAlpha = alpha;
+
+          if (pr.style === 'cleave') {
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 8;
+            ctx.beginPath();
+            ctx.arc(pr.tx, pr.ty, 30 + pr.progress * 18, -Math.PI * 0.8, Math.PI * 0.35);
+            ctx.stroke();
+            ctx.strokeStyle = '#f8fafc';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(pr.tx, pr.ty, 27 + pr.progress * 18, -Math.PI * 0.72, Math.PI * 0.25);
+            ctx.stroke();
+          } else if (pr.style === 'dual_slash') {
+            ctx.strokeStyle = '#4ade80';
+            ctx.lineWidth = 5;
+            const sz = 22 + pr.progress * 12;
+            ctx.beginPath();
+            ctx.moveTo(pr.tx - sz, pr.ty - sz);
+            ctx.lineTo(pr.tx + sz, pr.ty + sz);
+            ctx.stroke();
+            ctx.strokeStyle = '#fda4af';
+            ctx.beginPath();
+            ctx.moveTo(pr.tx + sz, pr.ty - sz);
+            ctx.lineTo(pr.tx - sz, pr.ty + sz);
+            ctx.stroke();
+          } else if (pr.style === 'hammer_wave') {
+            ctx.translate(cx, cy);
+            ctx.rotate(pr.progress * Math.PI * 4);
             ctx.fillStyle = '#0b0e14';
+            ctx.fillRect(-10, -10, 20, 20);
+            ctx.fillStyle = '#facc15';
+            ctx.fillRect(-8, -8, 16, 9);
+            ctx.fillStyle = '#92400e';
+            ctx.fillRect(-2, 1, 4, 9);
+          } else if (pr.style === 'arrow') {
+            ctx.fillStyle = '#4ade80';
+            ctx.fillRect(Math.round(cx - 18), Math.round(cy - 1), 12, 2);
+            ctx.fillStyle = '#a16207';
+            ctx.fillRect(Math.round(cx - 8), Math.round(cy - 2), 18, 4);
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(Math.round(cx + 8), Math.round(cy - 4), 7, 8);
+          } else if (pr.style === 'frost_orb') {
+            ctx.fillStyle = '#0284c7';
+            ctx.fillRect(Math.round(cx - 10), Math.round(cy - 10), 20, 20);
+            ctx.fillStyle = '#38bdf8';
             ctx.fillRect(Math.round(cx - 7), Math.round(cy - 7), 14, 14);
-            ctx.fillStyle = pr.color;
+            ctx.fillStyle = '#e0f2fe';
+            ctx.fillRect(Math.round(cx - 3), Math.round(cy - 3), 6, 6);
+          } else if (pr.style === 'fel_bolt') {
+            ctx.fillStyle = '#7e22ce';
+            ctx.fillRect(Math.round(cx - 12), Math.round(cy - 8), 16, 16);
+            ctx.fillStyle = '#16a34a';
+            ctx.fillRect(Math.round(cx - 8), Math.round(cy - 8), 16, 16);
+            ctx.fillStyle = '#4ade80';
+            ctx.fillRect(Math.round(cx - 5), Math.round(cy - 5), 10, 10);
+            ctx.fillStyle = '#dcfce7';
+            ctx.fillRect(Math.round(cx - 2), Math.round(cy - 2), 4, 4);
+          } else if (pr.style === 'moonfire') {
+            ctx.fillStyle = '#a5b4fc';
+            ctx.fillRect(Math.round(pr.tx - 10), Math.round(pr.ty - 10), 20, 20);
+            ctx.fillStyle = '#4ade80';
+            ctx.fillRect(Math.round(pr.tx - 6), Math.round(pr.ty - 6), 12, 12);
+          } else if (pr.style === 'holy_beam') {
+            ctx.fillStyle = '#fef08a';
+            ctx.fillRect(Math.round(pr.tx - 11), Math.round(pr.ty - 11), 22, 22);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(Math.round(pr.tx - 5), Math.round(pr.ty - 5), 10, 10);
+          } else if (pr.style === 'enemy_counter') {
+            ctx.fillStyle = '#090b10';
+            ctx.fillRect(Math.round(cx - 8), Math.round(cy - 8), 16, 16);
+            ctx.fillStyle = '#f43f5e';
             ctx.fillRect(Math.round(cx - 5), Math.round(cy - 5), 10, 10);
           } else {
-            // Crisp pixel slash arc over target
-            const alpha = 1 - pr.progress;
-            ctx.save();
-            ctx.globalAlpha = alpha;
-            ctx.strokeStyle = pr.color;
-            ctx.lineWidth = 5;
-            ctx.beginPath();
-            ctx.arc(pr.tx, pr.ty, 26 + pr.progress * 14, -Math.PI * 0.7, Math.PI * 0.25);
-            ctx.stroke();
-            ctx.restore();
+            // Lightning spark core
+            ctx.fillStyle = '#bae6fd';
+            ctx.fillRect(Math.round(pr.tx - 8), Math.round(pr.ty - 8), 16, 16);
+            ctx.fillStyle = pr.color;
+            ctx.fillRect(Math.round(pr.tx - 4), Math.round(pr.ty - 4), 8, 8);
           }
+          ctx.restore();
         }
 
         // Arcane Smite Pixel Lightning Bolts
@@ -1131,6 +1612,7 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
       return () => {
         cancelAnimationFrame(animId);
         window.removeEventListener('resize', resize);
+        ro?.disconnect();
       };
     }, []);
 

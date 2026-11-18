@@ -25,32 +25,10 @@ export const EMBLEM_GOLD_BONUS = 0.15;
 
 export const UPGRADES: UpgradeDef[] = [
   {
-    id: 'sharp_blade',
-    icon: 'sword',
-    name: { en: 'Runed Blade', 'zh-TW': '符文利刃', 'zh-CN': '符文利刃' },
-    baseCost: 10,
-    costMultiplier: 1.15,
-    kind: 'tap',
-    baseValue: 1.6,
-    hasMilestone25: true,
-    accent: '#38bdf8',
-  },
-  {
-    id: 'auto_attack',
-    icon: 'auto',
-    name: { en: 'Auto Strike', 'zh-TW': '自動連擊', 'zh-CN': '自动连击' },
-    baseCost: 45,
-    costMultiplier: 1.16,
-    kind: 'dps',
-    baseValue: 4,
-    hasMilestone25: true,
-    accent: '#60a5fa',
-  },
-  {
     id: 'fury',
     icon: 'fury',
     name: { en: 'Blood Fury', 'zh-TW': '嗜血狂怒', 'zh-CN': '嗜血狂怒' },
-    baseCost: 450,
+    baseCost: 350,
     costMultiplier: 1.38,
     kind: 'allDmg',
     baseValue: 0.25,
@@ -60,7 +38,7 @@ export const UPGRADES: UpgradeDef[] = [
     id: 'greed',
     icon: 'greed',
     name: { en: 'Goblin Greed', 'zh-TW': '地精貪婪', 'zh-CN': '地精贪婪' },
-    baseCost: 220,
+    baseCost: 180,
     costMultiplier: 1.35,
     kind: 'gold',
     baseValue: 0.25,
@@ -70,7 +48,7 @@ export const UPGRADES: UpgradeDef[] = [
     id: 'crit_luck',
     icon: 'clover',
     name: { en: 'Deadly Precision', 'zh-TW': '致命精準', 'zh-CN': '致命精准' },
-    baseCost: 140,
+    baseCost: 120,
     costMultiplier: 1.32,
     kind: 'crit',
     baseValue: 0.03,
@@ -80,7 +58,7 @@ export const UPGRADES: UpgradeDef[] = [
     id: 'titan_grip',
     icon: 'titan',
     name: { en: "Titan's Might", 'zh-TW': '泰坦之力', 'zh-CN': '泰坦之力' },
-    baseCost: 3200,
+    baseCost: 2600,
     costMultiplier: 1.18,
     kind: 'hybrid',
     baseValue: 35,
@@ -193,13 +171,47 @@ export const RACES: RaceDef[] = [
   },
 ];
 
-// All 9 Playable Classes from WoW: Forever
+// All 9 Playable Classes with unique Primary Attacks, distinct VFX & 2 upgradeable Countdown Auto-Skills
 export const HEROES: HeroDef[] = [
   {
     id: 'warrior',
     name: { en: 'Warrior', 'zh-TW': '戰士', 'zh-CN': '战士' },
     title: { en: 'Vanguard Blade', 'zh-TW': '先鋒劍士', 'zh-CN': '先锋剑士' },
     defaultRace: 'human',
+    attackStyle: 'cleave',
+    primaryAttack: {
+      id: 'heroic_cleave',
+      name: { en: 'Sundering Cleave', 'zh-TW': '破甲順劈斬', 'zh-CN': '破甲顺劈斩' },
+      description: { en: 'Heavy steel crescent arc strike', 'zh-TW': '重鋼新月弧光劈斬', 'zh-CN': '重钢新月弧光劈斩' },
+      style: 'cleave',
+      color: '#ef4444',
+      powerMult: 1.1,
+      baseCost: 10,
+    },
+    autoSkills: [
+      {
+        id: 'mortal_cleave',
+        name: { en: 'Mortal Strike', 'zh-TW': '致死打擊', 'zh-CN': '致死打击' },
+        description: { en: 'Heavy crimson cleave on target', 'zh-TW': '重創單體目標', 'zh-CN': '重创单体目标' },
+        cooldownSec: 3.5,
+        damageMult: 2.2,
+        upgradeBaseCost: 30,
+        aoe: false,
+        effect: 'cleave',
+        color: '#ef4444',
+      },
+      {
+        id: 'whirlwind',
+        name: { en: 'Whirlwind', 'zh-TW': '旋風斬', 'zh-CN': '旋风斩' },
+        description: { en: 'Spinning blade wave hits all foes', 'zh-TW': '橫掃場上所有敵人', 'zh-CN': '横扫场上所有敌人' },
+        cooldownSec: 8.0,
+        damageMult: 2.8,
+        upgradeBaseCost: 55,
+        aoe: true,
+        effect: 'whirlwind',
+        color: '#f87171',
+      },
+    ],
     bonusLabel: (rank, locale) => {
       const pct = 30 + (rank - 1) * 15;
       if (locale === 'zh-TW') return `+${pct}% 點擊傷害`;
@@ -207,6 +219,7 @@ export const HEROES: HeroDef[] = [
       return `+${pct}% tap damage`;
     },
     unlockCost: 0,
+    switchCostBase: 25,
     upgradeBaseCost: 80,
     upgradeMultiplier: 1.55,
     accent: '#c79c6e',
@@ -217,13 +230,49 @@ export const HEROES: HeroDef[] = [
     name: { en: 'Hunter', 'zh-TW': '獵人', 'zh-CN': '猎人' },
     title: { en: 'Zephras Marksman', 'zh-TW': '風嶼神射手', 'zh-CN': '风屿神射手' },
     defaultRace: 'skyborne_alliance',
+    attackStyle: 'arrow',
+    primaryAttack: {
+      id: 'heartseeker_arrow',
+      name: { en: 'Heartseeker Arrow', 'zh-TW': '尋心疾箭', 'zh-CN': '寻心疾箭' },
+      description: { en: 'High-velocity piercing wind arrow', 'zh-TW': '高速穿甲疾風箭矢', 'zh-CN': '高速穿甲疾风箭矢' },
+      style: 'arrow',
+      color: '#4ade80',
+      powerMult: 1.05,
+      baseCost: 10,
+    },
+    autoSkills: [
+      {
+        id: 'aimed_shot',
+        name: { en: 'Aimed Shot', 'zh-TW': '瞄準射擊', 'zh-CN': '瞄准射击' },
+        description: { en: 'Guaranteed critical piercing arrow', 'zh-TW': '必中暴擊穿甲箭', 'zh-CN': '必中暴击穿甲箭' },
+        cooldownSec: 3.2,
+        damageMult: 2.0,
+        upgradeBaseCost: 30,
+        aoe: false,
+        effect: 'arrow',
+        color: '#4ade80',
+        special: 'crit_guaranteed',
+      },
+      {
+        id: 'multi_shot',
+        name: { en: 'Multi-Shot', 'zh-TW': '多重射擊', 'zh-CN': '多重射击' },
+        description: { en: 'Arrow volley hits every enemy', 'zh-TW': '箭雨齊射所有目標', 'zh-CN': '箭雨齐射所有目标' },
+        cooldownSec: 7.5,
+        damageMult: 2.5,
+        upgradeBaseCost: 55,
+        aoe: true,
+        effect: 'volley',
+        color: '#86efac',
+      },
+    ],
     bonusLabel: (rank, locale) => {
       const pct = 10 + (rank - 1) * 2;
       if (locale === 'zh-TW') return `+${pct}% 暴擊率`;
       if (locale === 'zh-CN') return `+${pct}% 暴击率`;
       return `+${pct}% crit chance`;
     },
-    unlockCost: 160,
+    unlockCost: 80,
+    switchCostBase: 35,
     upgradeBaseCost: 200,
     upgradeMultiplier: 1.6,
     accent: '#abd473',
@@ -234,13 +283,49 @@ export const HEROES: HeroDef[] = [
     name: { en: 'Priest', 'zh-TW': '牧師', 'zh-CN': '牧师' },
     title: { en: 'Light & Shadow Cleric', 'zh-TW': '聖光暗影祭司', 'zh-CN': '圣光暗影牧师' },
     defaultRace: 'dwarf',
+    attackStyle: 'holy_beam',
+    primaryAttack: {
+      id: 'radiant_smite',
+      name: { en: 'Radiant Smite', 'zh-TW': '聖光懲擊', 'zh-CN': '圣光惩击' },
+      description: { en: 'Golden skybeam descends on target', 'zh-TW': '召喚天降聖光柱懲戒敵人', 'zh-CN': '召唤天降圣光柱惩戒敌人' },
+      style: 'holy_beam',
+      color: '#fef08a',
+      powerMult: 1.05,
+      baseCost: 10,
+    },
+    autoSkills: [
+      {
+        id: 'holy_fire',
+        name: { en: 'Holy Fire', 'zh-TW': '神聖之火', 'zh-CN': '神圣之火' },
+        description: { en: 'Radiant beam (+40% vs Boss)', 'zh-TW': '聖光柱灼燒首領', 'zh-CN': '圣光柱灼烧首领' },
+        cooldownSec: 3.2,
+        damageMult: 2.1,
+        upgradeBaseCost: 30,
+        aoe: false,
+        effect: 'holy',
+        color: '#fef08a',
+        special: 'boss_bonus',
+      },
+      {
+        id: 'shadow_nova',
+        name: { en: 'Mind Sear', 'zh-TW': '精神灼燒', 'zh-CN': '精神灼烧' },
+        description: { en: 'Shadow burst damages all foes', 'zh-TW': '暗影衝擊波全體傷害', 'zh-CN': '暗影冲击波全体伤害' },
+        cooldownSec: 7.0,
+        damageMult: 2.7,
+        upgradeBaseCost: 55,
+        aoe: true,
+        effect: 'shadow_aoe',
+        color: '#c084fc',
+      },
+    ],
     bonusLabel: (rank, locale) => {
       const pct = 45 + (rank - 1) * 25;
       if (locale === 'zh-TW') return `+${pct}% 首領傷害`;
       if (locale === 'zh-CN') return `+${pct}% 首领伤害`;
       return `+${pct}% boss damage`;
     },
-    unlockCost: 480,
+    unlockCost: 180,
+    switchCostBase: 45,
     upgradeBaseCost: 420,
     upgradeMultiplier: 1.6,
     accent: '#f8fafc',
@@ -251,13 +336,49 @@ export const HEROES: HeroDef[] = [
     name: { en: 'Mage', 'zh-TW': '法師', 'zh-CN': '法师' },
     title: { en: 'Dalaran Arcanist', 'zh-TW': '達拉然奧術師', 'zh-CN': '达拉然奥术师' },
     defaultRace: 'gnome',
+    attackStyle: 'frost_orb',
+    primaryAttack: {
+      id: 'frostfire_lance',
+      name: { en: 'Frostfire Lance', 'zh-TW': '霜火長矛', 'zh-CN': '霜火长矛' },
+      description: { en: 'Shattering crystalline ice orb', 'zh-TW': '迸裂寒冰法球貫穿敵陣', 'zh-CN': '迸裂寒冰法球贯穿敌阵' },
+      style: 'frost_orb',
+      color: '#38bdf8',
+      powerMult: 1.0,
+      baseCost: 10,
+    },
+    autoSkills: [
+      {
+        id: 'frostbolt',
+        name: { en: 'Frostbolt', 'zh-TW': '寒冰箭', 'zh-CN': '寒冰箭' },
+        description: { en: 'Chills & delays enemy skills', 'zh-TW': '冰霜緩速延緩敵方技能', 'zh-CN': '冰霜减速延缓敌方技能' },
+        cooldownSec: 2.8,
+        damageMult: 2.0,
+        upgradeBaseCost: 30,
+        aoe: false,
+        effect: 'frost',
+        color: '#38bdf8',
+        special: 'chill',
+      },
+      {
+        id: 'arcane_barrage',
+        name: { en: 'Arcane Barrage', 'zh-TW': '奧術彈幕', 'zh-CN': '奥术弹幕' },
+        description: { en: 'Arcane missiles blast all foes', 'zh-TW': '多重奧術飛彈轟炸全場', 'zh-CN': '多重奥术飞弹轰炸全场' },
+        cooldownSec: 7.2,
+        damageMult: 3.0,
+        upgradeBaseCost: 55,
+        aoe: true,
+        effect: 'arcane_barrage',
+        color: '#818cf8',
+      },
+    ],
     bonusLabel: (rank, locale) => {
       const pct = 60 + (rank - 1) * 30;
-      if (locale === 'zh-TW') return `+${pct}% 自動傷害`;
-      if (locale === 'zh-CN') return `+${pct}% 自动伤害`;
-      return `+${pct}% auto damage`;
+      if (locale === 'zh-TW') return `+${pct}% 奧義傷害`;
+      if (locale === 'zh-CN') return `+${pct}% 奥义伤害`;
+      return `+${pct}% skill power`;
     },
-    unlockCost: 1400,
+    unlockCost: 420,
+    switchCostBase: 60,
     upgradeBaseCost: 1000,
     upgradeMultiplier: 1.6,
     accent: '#69ccf0',
@@ -268,13 +389,49 @@ export const HEROES: HeroDef[] = [
     name: { en: 'Rogue', 'zh-TW': '盜賊', 'zh-CN': '潜行者' },
     title: { en: 'Ravenholdt Assassin', 'zh-TW': '拉文霍德刺客', 'zh-CN': '拉文霍德刺客' },
     defaultRace: 'night_elf',
+    attackStyle: 'dual_slash',
+    primaryAttack: {
+      id: 'venom_shiv',
+      name: { en: 'Venom Twin-Shiv', 'zh-TW': '淬毒雙刃刺', 'zh-CN': '淬毒双刃刺' },
+      description: { en: 'Cross-blade shadow venom slash', 'zh-TW': '劇毒雙匕首十字瞬斬', 'zh-CN': '剧毒双匕首十字瞬斩' },
+      style: 'dual_slash',
+      color: '#4ade80',
+      powerMult: 1.15,
+      baseCost: 10,
+    },
+    autoSkills: [
+      {
+        id: 'sinister_strike',
+        name: { en: 'Eviscerate', 'zh-TW': '剔骨', 'zh-CN': '刺骨' },
+        description: { en: 'Rapid dual-blade X-slash', 'zh-TW': '高速雙刃十字斬', 'zh-CN': '高速双刃十字斩' },
+        cooldownSec: 2.2,
+        damageMult: 1.9,
+        upgradeBaseCost: 30,
+        aoe: false,
+        effect: 'dual',
+        color: '#fbbf24',
+      },
+      {
+        id: 'fan_knives',
+        name: { en: 'Fan of Knives', 'zh-TW': '飛舞刀扇', 'zh-CN': '刀扇' },
+        description: { en: 'Hits all foes & pilfers Gold', 'zh-TW': '全場飛刀並額外竊取金幣', 'zh-CN': '全场飞刀并额外窃取金币' },
+        cooldownSec: 6.8,
+        damageMult: 2.4,
+        upgradeBaseCost: 55,
+        aoe: true,
+        effect: 'fan_knives',
+        color: '#fda4af',
+        special: 'gold_steal',
+      },
+    ],
     bonusLabel: (rank, locale) => {
       const pct = 60 + (rank - 1) * 25;
       if (locale === 'zh-TW') return `+${pct}% 金幣掉落`;
       if (locale === 'zh-CN') return `+${pct}% 金币掉落`;
       return `+${pct}% gold drops`;
     },
-    unlockCost: 4200,
+    unlockCost: 950,
+    switchCostBase: 80,
     upgradeBaseCost: 2800,
     upgradeMultiplier: 1.65,
     accent: '#fff569',
@@ -285,13 +442,49 @@ export const HEROES: HeroDef[] = [
     name: { en: 'Shaman', 'zh-TW': '薩滿', 'zh-CN': '萨满祭司' },
     title: { en: 'Windshaper Stormcaller', 'zh-TW': '馭風喚雷者', 'zh-CN': '驭风唤雷者' },
     defaultRace: 'skyborne_horde',
+    attackStyle: 'lightning',
+    primaryAttack: {
+      id: 'stormstrike_bolt',
+      name: { en: 'Stormstrike Bolt', 'zh-TW': '風暴閃電擊', 'zh-CN': '风暴闪电击' },
+      description: { en: 'Crackling storm arc hits target', 'zh-TW': '狂暴電弧直接轟擊目標', 'zh-CN': '狂暴电弧直接轰击目标' },
+      style: 'lightning',
+      color: '#38bdf8',
+      powerMult: 1.15,
+      baseCost: 10,
+    },
+    autoSkills: [
+      {
+        id: 'chain_lightning',
+        name: { en: 'Chain Lightning', 'zh-TW': '閃電鏈', 'zh-CN': '闪电链' },
+        description: { en: 'Arcs across all active enemies', 'zh-TW': '跳躍電流貫穿全場敵人', 'zh-CN': '跳跃电流贯穿全场敌人' },
+        cooldownSec: 3.4,
+        damageMult: 2.0,
+        upgradeBaseCost: 30,
+        aoe: true,
+        effect: 'lightning',
+        color: '#38bdf8',
+      },
+      {
+        id: 'lava_burst',
+        name: { en: 'Lava Burst', 'zh-TW': '熔岩爆裂', 'zh-CN': '熔岩爆裂' },
+        description: { en: 'Molten critical blast on target', 'zh-TW': '必爆烈焰熔岩重擊', 'zh-CN': '必爆烈焰熔岩重击' },
+        cooldownSec: 7.4,
+        damageMult: 3.4,
+        upgradeBaseCost: 55,
+        aoe: false,
+        effect: 'lava',
+        color: '#f97316',
+        special: 'crit_guaranteed',
+      },
+    ],
     bonusLabel: (rank, locale) => {
       const pct = 50 + (rank - 1) * 25;
-      if (locale === 'zh-TW') return `+${pct}% 點擊與自動`;
-      if (locale === 'zh-CN') return `+${pct}% 点击与自动`;
-      return `+${pct}% tap & auto`;
+      if (locale === 'zh-TW') return `+${pct}% 點擊與奧義`;
+      if (locale === 'zh-CN') return `+${pct}% 点击与奥义`;
+      return `+${pct}% tap & skills`;
     },
-    unlockCost: 12500,
+    unlockCost: 2200,
+    switchCostBase: 110,
     upgradeBaseCost: 8200,
     upgradeMultiplier: 1.65,
     accent: '#0070de',
@@ -302,13 +495,49 @@ export const HEROES: HeroDef[] = [
     name: { en: 'Paladin', 'zh-TW': '聖騎士', 'zh-CN': '圣骑士' },
     title: { en: 'Forsaken Crusader', 'zh-TW': '永恆十字軍', 'zh-CN': '永恒十字军' },
     defaultRace: 'undead',
+    attackStyle: 'hammer_wave',
+    primaryAttack: {
+      id: 'lightforged_hammer',
+      name: { en: 'Lightforged Hammer', 'zh-TW': '聖光重錘擊', 'zh-CN': '圣光重锤击' },
+      description: { en: 'Hurls spinning golden warhammer', 'zh-TW': '擲出迴旋黃金戰錘衝擊目標', 'zh-CN': '掷出回旋黄金战锤冲击目标' },
+      style: 'hammer_wave',
+      color: '#fde047',
+      powerMult: 1.2,
+      baseCost: 10,
+    },
+    autoSkills: [
+      {
+        id: 'crusader_strike',
+        name: { en: 'Judgment', 'zh-TW': '審判之錘', 'zh-CN': '审判之锤' },
+        description: { en: 'Golden hammer slam on target', 'zh-TW': '聖光巨錘制裁敵人', 'zh-CN': '圣光巨锤制裁敌人' },
+        cooldownSec: 3.3,
+        damageMult: 2.3,
+        upgradeBaseCost: 30,
+        aoe: false,
+        effect: 'hammer',
+        color: '#fde047',
+      },
+      {
+        id: 'consecration',
+        name: { en: 'Consecration', 'zh-TW': '奉獻聖盾', 'zh-CN': '奉献圣盾' },
+        description: { en: 'Burns all foes & shields Gold', 'zh-TW': '灼燒全場並格擋一次偷幣', 'zh-CN': '灼烧全场并格挡一次偷币' },
+        cooldownSec: 8.5,
+        damageMult: 2.9,
+        upgradeBaseCost: 55,
+        aoe: true,
+        effect: 'consecrate',
+        color: '#facc15',
+        special: 'shield',
+      },
+    ],
     bonusLabel: (rank, locale) => {
       const pct = 75 + (rank - 1) * 35;
       if (locale === 'zh-TW') return `+${pct}% 全體傷害`;
       if (locale === 'zh-CN') return `+${pct}% 全体伤害`;
       return `+${pct}% all damage`;
     },
-    unlockCost: 36000,
+    unlockCost: 5000,
+    switchCostBase: 150,
     upgradeBaseCost: 22000,
     upgradeMultiplier: 1.7,
     accent: '#f58cba',
@@ -319,13 +548,48 @@ export const HEROES: HeroDef[] = [
     name: { en: 'Druid', 'zh-TW': '德魯伊', 'zh-CN': '德鲁伊' },
     title: { en: 'Hyjal Moonkeeper', 'zh-TW': '海加爾月光守衛', 'zh-CN': '海加尔月光守卫' },
     defaultRace: 'tauren',
+    attackStyle: 'moonfire',
+    primaryAttack: {
+      id: 'starlight_wrath',
+      name: { en: 'Starlight Wrath', 'zh-TW': '星光憤怒', 'zh-CN': '星光愤怒' },
+      description: { en: 'Emerald lunar beam strikes foe', 'zh-TW': '翠綠星月光束轟落目標', 'zh-CN': '翠绿星月光束轰落目标' },
+      style: 'moonfire',
+      color: '#4ade80',
+      powerMult: 1.2,
+      baseCost: 10,
+    },
+    autoSkills: [
+      {
+        id: 'moonfire',
+        name: { en: 'Moonfire', 'zh-TW': '月火術', 'zh-CN': '月火术' },
+        description: { en: 'Lunar beam drops from above', 'zh-TW': '天降月光柱打擊目標', 'zh-CN': '天降月光柱打击目标' },
+        cooldownSec: 2.7,
+        damageMult: 2.1,
+        upgradeBaseCost: 30,
+        aoe: false,
+        effect: 'moonfire',
+        color: '#a5b4fc',
+      },
+      {
+        id: 'starfall',
+        name: { en: 'Starfall', 'zh-TW': '星辰墜落', 'zh-CN': '星辰坠落' },
+        description: { en: 'Starlight meteors strike all foes', 'zh-TW': '召喚星雨轟炸全場', 'zh-CN': '召唤星雨轰炸全场' },
+        cooldownSec: 8.0,
+        damageMult: 3.1,
+        upgradeBaseCost: 55,
+        aoe: true,
+        effect: 'starfall',
+        color: '#4ade80',
+      },
+    ],
     bonusLabel: (rank, locale) => {
       const pct = 85 + (rank - 1) * 35;
       if (locale === 'zh-TW') return `+${pct}% 傷害與金幣`;
       if (locale === 'zh-CN') return `+${pct}% 伤害与金币`;
       return `+${pct}% dmg & gold`;
     },
-    unlockCost: 95000,
+    unlockCost: 11500,
+    switchCostBase: 210,
     upgradeBaseCost: 58000,
     upgradeMultiplier: 1.72,
     accent: '#ff7d0a',
@@ -336,19 +600,76 @@ export const HEROES: HeroDef[] = [
     name: { en: 'Warlock', 'zh-TW': '術士', 'zh-CN': '术士' },
     title: { en: 'Fel Harvest Master', 'zh-TW': '黑鐮邪能領主', 'zh-CN': '黑镰邪能领主' },
     defaultRace: 'troll',
+    attackStyle: 'fel_bolt',
+    primaryAttack: {
+      id: 'soulfire_bolt',
+      name: { en: 'Soulfire Bolt', 'zh-TW': '靈魂烈焰箭', 'zh-CN': '灵魂烈焰箭' },
+      description: { en: 'Volatile fel-green cursed bolt', 'zh-TW': '邪能詛咒火球轟爆目標', 'zh-CN': '邪能诅咒火球轰爆目标' },
+      style: 'fel_bolt',
+      color: '#4ade80',
+      powerMult: 1.25,
+      baseCost: 10,
+    },
+    autoSkills: [
+      {
+        id: 'shadow_bolt',
+        name: { en: 'Chaos Bolt', 'zh-TW': '混亂之箭', 'zh-CN': '混乱之箭' },
+        description: { en: 'Critical fel-skull blast', 'zh-TW': '必爆邪能顱骨轟擊', 'zh-CN': '必爆邪能颅骨轰击' },
+        cooldownSec: 3.1,
+        damageMult: 2.6,
+        upgradeBaseCost: 30,
+        aoe: false,
+        effect: 'fel_bolt',
+        color: '#4ade80',
+        special: 'crit_guaranteed',
+      },
+      {
+        id: 'rain_of_fire',
+        name: { en: 'Rain of Fire', 'zh-TW': '火焰之雨', 'zh-CN': '火焰之雨' },
+        description: { en: 'Fel meteors scorch every foe', 'zh-TW': '邪能火雨焚燒所有敵人', 'zh-CN': '邪能火雨焚烧所有敌人' },
+        cooldownSec: 8.2,
+        damageMult: 3.3,
+        upgradeBaseCost: 55,
+        aoe: true,
+        effect: 'rain_of_fire',
+        color: '#c084fc',
+      },
+    ],
     bonusLabel: (rank, locale) => {
       const pct = 120 + (rank - 1) * 45;
       if (locale === 'zh-TW') return `+${pct}% 暴擊與技能`;
       if (locale === 'zh-CN') return `+${pct}% 暴击与技能`;
       return `+${pct}% crit & skills`;
     },
-    unlockCost: 260000,
+    unlockCost: 26000,
+    switchCostBase: 300,
     upgradeBaseCost: 145000,
     upgradeMultiplier: 1.75,
     accent: '#9482c9',
     projectileColor: '#4ade80',
   },
 ];
+
+export const ENEMY_COUNTER_SKILLS: Record<
+  'normal' | 'rare' | 'boss',
+  { name: { en: string; 'zh-TW': string; 'zh-CN': string }; cooldownSec: number; stealRatio: number }
+> = {
+  normal: {
+    name: { en: 'Pickpocket', 'zh-TW': '掠奪偷襲', 'zh-CN': '掠夺偷袭' },
+    cooldownSec: 9.0,
+    stealRatio: 0.06,
+  },
+  rare: {
+    name: { en: 'Shadow Snatch', 'zh-TW': '暗影劫財', 'zh-CN': '暗影劫财' },
+    cooldownSec: 6.8,
+    stealRatio: 0.09,
+  },
+  boss: {
+    name: { en: 'Boss Plunder', 'zh-TW': '首領重擊劫掠', 'zh-CN': '首领重击劫掠' },
+    cooldownSec: 5.8,
+    stealRatio: 0.12,
+  },
+};
 
 export const SKILLS: SkillDef[] = [
   {
@@ -832,9 +1153,23 @@ export const UI_COPY: Record<
     howToPlayCta: string;
     controlsHint: string;
     startFeatures: { title: string; desc: string }[];
+    chooseRaceLabel: string;
+    raceLockedTag: string;
+    primaryAtkTag: string;
+    skillUpgradeTag: string;
+    switchClass: string;
+    racialAffinity: string;
     boostBtn: string;
     boostSub: string;
     boostActive: string;
+    wardBtn: string;
+    wardActive: string;
+    hasteBtn: string;
+    hasteActive: string;
+    reclaimBtn: string;
+    bossPenaltyBanner: string;
+    bossSecondWindCta: string;
+    autoSkillsLabel: string;
     floorLabel: string;
     bossTag: string;
     heroesHeader: string;
@@ -874,6 +1209,10 @@ export const UI_COPY: Record<
     offlineClaim: string;
     adTitle: string;
     adDamage: string;
+    adWard: string;
+    adHaste: string;
+    adReclaim: string;
+    adBossWind: string;
     adOffline: string;
     adWait: string;
     adClaim: string;
@@ -890,22 +1229,36 @@ export const UI_COPY: Record<
     howToPlayCta: 'How to Play',
     controlsHint: 'Click / Space: Strike · Keys 1–3: Cast Skills · Esc: Pause & Audio',
     startFeatures: [
-      { title: '9 Classes & 9 Races', desc: 'Build combos with Dual-Faction Skyborne & class auras' },
-      { title: '13 Dungeons & Raids', desc: 'Conquer Zephras Isle up to Onyxia’s Lair & Hyjal Summit' },
-      { title: 'Rare Elites & Relics', desc: 'Hunt silver & gold Rares for Soul Shards & Ascend' },
+      { title: 'Pick Race at Start', desc: 'Your race & visual appearance lock in when the quest begins' },
+      { title: 'Pay Coins to Switch Class', desc: 'Unlock & train unique primary attacks and 2 class skills' },
+      { title: 'Wards, Haste & Recovery', desc: 'Stagger enemy steals, shield coins, or reclaim lost loot' },
     ],
+    chooseRaceLabel: 'Choose Your Race (Locked Once Started)',
+    raceLockedTag: 'Locked Race',
+    primaryAtkTag: 'Primary Attack',
+    skillUpgradeTag: 'Class Skill',
+    switchClass: 'CHANGE',
+    racialAffinity: 'Racial -30%',
     boostBtn: '2X DAMAGE',
-    boostSub: 'watch a short ad',
-    boostActive: '2X ACTIVE',
+    boostSub: 'watch ad',
+    boostActive: '2X DMG',
+    wardBtn: 'COIN WARD',
+    wardActive: 'WARDED',
+    hasteBtn: '2X HASTE',
+    hasteActive: 'HASTE',
+    reclaimBtn: 'RECLAIM',
+    bossPenaltyBanner: 'Boss enraged & plundered gold!',
+    bossSecondWindCta: 'Second Wind (Ad)',
+    autoSkillsLabel: 'CLASS AUTO-SKILLS',
     floorLabel: 'FLOOR',
     bossTag: 'BOSS',
     heroesHeader: 'CLASSES',
-    heroesSub: 'Tap any unlocked class to fight · Pick your Race below',
-    raceLabel: 'Active Race',
+    heroesSub: 'Pay coins to switch class mid-run · Appearance adapts to your race',
+    raceLabel: 'Race',
     fighting: 'FIGHTING',
-    pick: 'PICK',
+    pick: 'CHANGE',
     unlock: 'UNLOCK',
-    upgrade: 'UPGRADE',
+    upgrade: 'RANK UP',
     skillsTitle: 'SKILLS',
     skillsSub: 'Use them with the round buttons or keys 1, 2, 3',
     opensOnFloor: 'Opens on floor',
@@ -927,11 +1280,11 @@ export const UI_COPY: Record<
     pausedTitle: 'SETTINGS & PAUSE',
     helpTitle: 'ADVENTURER GUIDE',
     helpLines: [
-      'Play all 9 Classes (Warrior, Hunter, Priest, Mage, Rogue, Shaman, Paladin, Druid, Warlock) and choose from 9 Races including Dual-Faction Skyborne!',
-      'Progress from Zephras Isle through all 9 Dungeons (Hall of Thanes, Ruins of Lordaeron, City of Dalaran, Shaper\'s Terrace) into the 3 Launch Raids (Barrow Deeps, Hyjal Summit, Onyxia\'s Lair).',
-      'Watch for silver/gold RARE and RARE ELITE spawns (like Fernfeather, Victor the Vile, Lynn the Ignored, Broodmother Valraxx) for bonus Gold & Soul Shards.',
-      'Cast active Skills using the round buttons or keys 1, 2, 3.',
-      'Ascend at Floor 10+ to earn permanent Heroic Emblems.',
+      'Choose your Race before starting—your race and hero appearance stay locked for the run, while you can pay coins mid-game to change Classes!',
+      'Each of the 9 Classes has a unique Primary Attack, custom attack VFX, and 2 Countdown Auto-Skills that can each be upgraded individually in the Upgrades tab.',
+      'Watch enemy cast bars! When an enemy finishes its cooldown skill, it counter-attacks and steals gold. Tap telegraphing foes to stagger them, or activate Coin Ward.',
+      'Use Ad Buffs & Recovery: 2X Damage, Coin Ward (blocks coin theft for 5m), 2X Haste (halves auto-skill cooldowns), Reclaim Lost Gold (150% back!), and Boss Second Wind.',
+      'Hover over the bottom-left Class Skill icons to inspect skill names and cooldowns.',
     ],
     close: 'Close',
     resume: 'Resume Battle',
@@ -943,11 +1296,15 @@ export const UI_COPY: Record<
     offlineClaim: 'Claim 1x',
     adTitle: 'Tavern Reward',
     adDamage: 'Unlock 5-Minute 2X Damage Aura',
+    adWard: 'Activate 5-Minute Coin Ward (Blocks Gold Theft)',
+    adHaste: 'Activate 3-Minute 2X Class Auto-Skill Haste',
+    adReclaim: 'Reclaim 150% of Stolen Dungeon Gold',
+    adBossWind: 'Second Wind: +15s Boss Timer & 25% Smite',
     adOffline: 'Double Your Offline Raid Loot',
     adWait: 'Summoning reward...',
-    adClaim: 'Claim Buff',
+    adClaim: 'Claim Reward',
     tapDmgShort: 'Tap',
-    dpsShort: 'DPS',
+    dpsShort: 'Skill',
   },
   'zh-TW': {
     gameTitle: '地下城世界',
@@ -958,20 +1315,34 @@ export const UI_COPY: Record<
     howToPlayCta: '遊戲說明',
     controlsHint: '點擊怪物 / 空白鍵攻擊 · 按鍵 1–3 施放技能 · Esc 暫停與音效',
     startFeatures: [
-      { title: '九大職業與種族', desc: '自由搭配雙陣營天裔與九大職業光環' },
-      { title: '十三大副本與團本', desc: '從澤弗拉斯一路攻略至奧妮克希亞巢穴' },
-      { title: '稀有精英與飛昇', desc: '狩獵稀有怪掉落靈魂碎片鍛造聖物' },
+      { title: '開局選定種族', desc: '開始遊戲後種族與專屬外觀鎖定，無法中途更換種族' },
+      { title: '付費轉職與獨立強化', desc: '戰鬥中可花費金幣轉職，個別升級普攻與 2 個職業技能' },
+      { title: '護盾、加速與追回獎勵', desc: '打斷敵方偷幣，或看廣告開啟防盜護盾與 150% 追回' },
     ],
+    chooseRaceLabel: '選擇你的種族（開始後不可更改）',
+    raceLockedTag: '已鎖定種族',
+    primaryAtkTag: '職業普攻',
+    skillUpgradeTag: '職業技能',
+    switchClass: '轉職',
+    racialAffinity: '種族 -30%',
     boostBtn: '2倍傷害',
-    boostSub: '觀看短廣告',
-    boostActive: '2倍增幅中',
+    boostSub: '看廣告',
+    boostActive: '2倍傷害',
+    wardBtn: '金幣護盾',
+    wardActive: '護盾中',
+    hasteBtn: '2倍急速',
+    hasteActive: '急速中',
+    reclaimBtn: '追回失金',
+    bossPenaltyBanner: '首領狂暴並掠奪了金幣！',
+    bossSecondWindCta: '神聖逆轉 (廣告)',
+    autoSkillsLabel: '職業自動技能',
     floorLabel: '第',
     bossTag: '首領',
     heroesHeader: '九大職業',
-    heroesSub: '點擊職業派遣出戰 · 下方選擇對應種族天賦',
-    raceLabel: '當前種族',
+    heroesSub: '戰鬥中可花費金幣轉職 · 角色外觀隨開局種族變化',
+    raceLabel: '種族',
     fighting: '作戰中',
-    pick: '派遣',
+    pick: '轉職',
     unlock: '招募',
     upgrade: '強化',
     skillsTitle: '主動技能',
@@ -994,10 +1365,10 @@ export const UI_COPY: Record<
     pausedTitle: '設定與暫停',
     helpTitle: '冒險者指南',
     helpLines: [
-      '解鎖全部 9 大職業（戰士、獵人、牧師、法師、盜賊、薩滿、聖騎士、德魯伊、術士）並搭配 9 大種族（含雙陣營天裔）天賦！',
-      '從澤弗拉斯之島出發，攻略 9 大全新副本與 3 大團隊副本（獸穴深處、海加爾山巔、奧妮克希亞巢穴）。',
-      '擊敗銀色/金色邊框的「稀有」與「稀有精英」怪物可掉落額外金幣與靈魂碎片！',
-      '使用左下角圓形按鈕或按 1, 2, 3 施放技能。',
+      '開局時須選擇種族，進入遊戲後種族與外觀即鎖定；但在副本中可隨時花費金幣轉換職業！',
+      '9 大職業皆有專屬「基礎攻擊」特效與 2 個「自動倒數技能」，可於升級分頁個別獨立強化。',
+      '滑鼠移至左下角技能圖示可查看技能名稱與冷卻詳情。',
+      '留意怪物頭上的施法警訊！點擊預警中的怪物可推遲偷幣，或看廣告開啟金幣護盾與追回 150% 失金。',
       '第 10 層後可進行靈魂飛昇獲得永久徽記。',
     ],
     close: '關閉',
@@ -1010,11 +1381,15 @@ export const UI_COPY: Record<
     offlineClaim: '直接領取 1倍',
     adTitle: '旅店激勵獎勵',
     adDamage: '解鎖 5 分鐘 2倍傷害光環',
+    adWard: '啟動 5 分鐘金幣護盾（免疫敵方偷幣）',
+    adHaste: '啟動 3 分鐘 2倍職業自動技能急速',
+    adReclaim: '追回 150% 被怪物偷走的副本金幣',
+    adBossWind: '神聖逆轉：首領限時 +15秒 並重創 25% 血量',
     adOffline: '雙倍領取離線戰利品',
     adWait: '獎勵載入中...',
-    adClaim: '領取強化',
+    adClaim: '領取獎勵',
     tapDmgShort: '點擊',
-    dpsShort: '秒傷',
+    dpsShort: '奧義',
   },
   'zh-CN': {
     gameTitle: '地下城世界',
@@ -1025,20 +1400,34 @@ export const UI_COPY: Record<
     howToPlayCta: '玩法说明',
     controlsHint: '点击怪物 / 空格键攻击 · 按键 1–3 施放技能 · Esc 暂停与音效',
     startFeatures: [
-      { title: '九大职业与种族', desc: '自由搭配双阵营天裔与九大职业光环' },
-      { title: '十三大副本与团本', desc: '从泽弗拉斯一路攻略至奥妮克希亚巢穴' },
-      { title: '稀有精英与飞升', desc: '狩猎稀有怪掉落灵魂碎片锻造圣物' },
+      { title: '开局选定种族', desc: '开始游戏后种族与专属外观锁定，不可中途更改种族' },
+      { title: '付费转职与独立强化', desc: '战斗中可花费金币转职，分别升级普攻与 2 个职业技能' },
+      { title: '护盾、急速与追回奖励', desc: '打断敌方偷币，或看广告开启防盗护盾与 150% 追回' },
     ],
+    chooseRaceLabel: '选择你的种族（开始后不可更改）',
+    raceLockedTag: '已锁定种族',
+    primaryAtkTag: '职业普攻',
+    skillUpgradeTag: '职业技能',
+    switchClass: '转职',
+    racialAffinity: '种族 -30%',
     boostBtn: '2倍伤害',
-    boostSub: '观看短广告',
-    boostActive: '2倍增幅中',
+    boostSub: '看广告',
+    boostActive: '2倍伤害',
+    wardBtn: '金币护盾',
+    wardActive: '护盾中',
+    hasteBtn: '2倍急速',
+    hasteActive: '急速中',
+    reclaimBtn: '追回失金',
+    bossPenaltyBanner: '首领狂暴并掠夺了金币！',
+    bossSecondWindCta: '神圣逆转 (广告)',
+    autoSkillsLabel: '职业自动技能',
     floorLabel: '第',
     bossTag: '首领',
     heroesHeader: '九大职业',
-    heroesSub: '点击职业派遣出战 · 下方选择对应种族天赋',
-    raceLabel: '当前种族',
+    heroesSub: '战斗中可花费金币转职 · 角色外观随开局种族变化',
+    raceLabel: '种族',
     fighting: '作战中',
-    pick: '派遣',
+    pick: '转职',
     unlock: '招募',
     upgrade: '强化',
     skillsTitle: '主动技能',
@@ -1061,10 +1450,10 @@ export const UI_COPY: Record<
     pausedTitle: '设置与暂停',
     helpTitle: '冒险者指南',
     helpLines: [
-      '解锁全部 9 大职业（战士、猎人、牧师、法师、潜行者、萨满、圣骑士、德鲁伊、术士）并搭配 9 大种族（含双阵营天裔）天赋！',
-      '从泽弗拉斯之岛出发，攻略 9 大全新副本与 3 大团队副本（兽穴深处、海加尔山巅、奥妮克希亚巢穴）。',
-      '击败银色/金色边框的“稀有”与“稀有精英”怪物可掉落额外金币与灵魂碎片！',
-      '使用左下角圆形按钮或按 1, 2, 3 施放技能。',
+      '开局时需选择种族，进入游戏后种族与外观即锁定；但在副本中可随时花费金币切换职业！',
+      '9 大职业皆有专属「基础攻击」特效与 2 个「自动倒计时技能」，可在升级页分别独立强化。',
+      '鼠标悬停于左下角技能图标可查看技能名称与冷却详情。',
+      '留意怪物头上的施法警讯！点击预警中的怪物可延迟偷币，或看广告开启金币护盾与追回 150% 失金。',
       '第 10 层后可进行灵魂飞升获得永久徽记。',
     ],
     close: '关闭',
@@ -1077,11 +1466,15 @@ export const UI_COPY: Record<
     offlineClaim: '直接领取 1倍',
     adTitle: '旅店激励奖励',
     adDamage: '解锁 5 分钟 2倍伤害光环',
+    adWard: '启动 5 分钟金币护盾（免疫敌方偷币）',
+    adHaste: '启动 3 分钟 2倍职业自动技能急速',
+    adReclaim: '追回 150% 被怪物偷走的副本金币',
+    adBossWind: '神圣逆转：首领限时 +15秒 并重创 25% 血量',
     adOffline: '双倍领取离线战利品',
     adWait: '奖励加载中...',
-    adClaim: '领取强化',
+    adClaim: '领取奖励',
     tapDmgShort: '点击',
-    dpsShort: '秒伤',
+    dpsShort: '奥义',
   },
 };
 
@@ -1105,6 +1498,51 @@ export function getZoneForFloor(floor: number): { zone: DungeonZone; tier: numbe
 
 export function isBossFloor(floor: number): boolean {
   return floor > 0 && floor % 5 === 0;
+}
+
+export interface ArenaLayout {
+  mode: 'side' | 'stacked';
+  arenaW: number;
+  arenaH: number;
+  dockW: number;
+  dockH: number;
+}
+
+export function getArenaLayout(w: number, h: number): ArenaLayout {
+  const safeW = Math.max(320, Math.round(w));
+  const safeH = Math.max(320, Math.round(h));
+
+  // Side-by-side on desktop, CrazyGames QA (~940px+), landscape tablets, and landscape phones
+  const isWideSide = safeW >= 860 && safeW >= safeH * 0.95;
+  const isMobileLandscape = safeW < 860 && safeH < 520 && safeW > safeH * 1.2;
+
+  if (isWideSide || isMobileLandscape) {
+    const dockW = isMobileLandscape
+      ? Math.min(320, Math.max(250, Math.round(safeW * 0.44)))
+      : safeW >= 1120
+      ? 430
+      : safeW >= 960
+      ? 390
+      : 350;
+    const arenaW = Math.max(280, safeW - dockW);
+    return {
+      mode: 'side',
+      arenaW,
+      arenaH: safeH,
+      dockW: safeW - arenaW,
+      dockH: safeH,
+    };
+  }
+
+  // Stacked top/bottom for Y8 4:3 (760x570) and mobile/tablet portrait
+  const arenaH = Math.round(safeH * 0.52);
+  return {
+    mode: 'stacked',
+    arenaW: safeW,
+    arenaH,
+    dockW: safeW,
+    dockH: Math.max(180, safeH - arenaH),
+  };
 }
 
 export function getMonsterHp(floor: number, isBoss: boolean, isRare = false): number {
@@ -1148,6 +1586,58 @@ export function getBulkUpgradeQuote(
   }
   if (count === 0) return { count: 1, totalCost: getUpgradeCost(def, owned) };
   return { count, totalCost: total };
+}
+
+export function getBulkGenericCostQuote(
+  baseCost: number,
+  costMultiplier: number,
+  owned: number,
+  gold: number,
+  buyAmount: BuyAmount
+): { count: number; totalCost: number } {
+  const costAt = (lv: number) => Math.floor(baseCost * Math.pow(costMultiplier, Math.max(0, lv)));
+  if (buyAmount === 1) {
+    return { count: 1, totalCost: costAt(owned) };
+  }
+  if (buyAmount === 10) {
+    let total = 0;
+    for (let i = 0; i < 10; i++) total += costAt(owned + i);
+    return { count: 10, totalCost: total };
+  }
+  let count = 0;
+  let total = 0;
+  let cur = owned;
+  while (count < 100) {
+    const c = costAt(cur);
+    if (total + c > gold) break;
+    total += c;
+    cur++;
+    count++;
+  }
+  if (count === 0) return { count: 1, totalCost: costAt(owned) };
+  return { count, totalCost: total };
+}
+
+export function getClassUnlockCost(hero: HeroDef, raceId: RaceId): number {
+  if (hero.unlockCost <= 0) return 0;
+  const race = getRaceById(raceId);
+  const affinity = race.classes.includes(hero.id);
+  return Math.max(10, Math.floor(hero.unlockCost * (affinity ? 0.7 : 1)));
+}
+
+export function getClassSwitchCost(hero: HeroDef, floor: number, raceId: RaceId): number {
+  const race = getRaceById(raceId);
+  const affinity = race.classes.includes(hero.id);
+  const raw = hero.switchCostBase + Math.max(0, floor - 1) * 14;
+  return Math.max(15, Math.floor(raw * (affinity ? 0.7 : 1)));
+}
+
+export function getClassAttackLevel(save: SaveState, id: HeroId): number {
+  return Math.max(1, save.classAttackLevels?.[id] || 1);
+}
+
+export function getClassSkillLevel(save: SaveState, skillId: string): number {
+  return Math.max(1, save.classSkillLevels?.[skillId] || 1);
 }
 
 export function getHeroUpgradeCost(hero: HeroDef, rank: number): number {

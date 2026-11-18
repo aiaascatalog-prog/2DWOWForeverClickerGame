@@ -75,6 +75,7 @@ async function createSeededContext(browser, width, height, videoDir) {
     const seedSave = {
       gold: 4850,
       lifetimeGold: 28500,
+      stolenGoldBank: 0,
       floor: 15,
       maxFloor: 15,
       killsOnFloor: 4,
@@ -88,6 +89,7 @@ async function createSeededContext(browser, width, height, videoDir) {
       ascensionCount: 0,
       activeHero: 'paladin',
       activeRace: 'skyborne_alliance',
+      raceLocked: true,
       unlockedHeroes: ['warrior', 'hunter', 'priest', 'mage', 'rogue', 'shaman', 'paladin'],
       heroRanks: {
         warrior: 3,
@@ -100,9 +102,34 @@ async function createSeededContext(browser, width, height, videoDir) {
         warlock: 1,
         druid: 1,
       },
+      classAttackLevels: {
+        warrior: 8,
+        paladin: 16,
+        hunter: 4,
+        rogue: 2,
+        priest: 4,
+        shaman: 4,
+        mage: 5,
+        warlock: 1,
+        druid: 1,
+      },
+      classSkillLevels: {
+        heroic_strike: 6,
+        whirlwind: 5,
+        aimed_shot: 3,
+        multi_shot: 3,
+        holy_fire: 4,
+        shadow_nova: 4,
+        frostbolt: 4,
+        arcane_barrage: 4,
+        sinister_strike: 2,
+        fan_knives: 2,
+        chain_lightning: 4,
+        lava_burst: 4,
+        crusader_strike: 12,
+        consecration: 11,
+      },
       upgrades: {
-        sharp_blade: 16,
-        auto_attack: 12,
         fury: 3,
         greed: 3,
         crit_luck: 5,
@@ -134,11 +161,22 @@ async function recordSpec(browser, specKey) {
 
   const { context, page } = await createSeededContext(browser, spec.width, spec.height, rawDir);
 
-  const isDesktop = spec.width >= 920;
-  const arenaW = isDesktop ? Math.max(460, spec.width - 430) : spec.width;
-  const arenaH = isDesktop ? spec.height : Math.max(300, spec.height * 0.52);
-  const enemyX = Math.round(arenaW * 0.65);
-  const enemyY = Math.round(arenaH * 0.72);
+  const isWideSide = spec.width >= 860 && spec.width >= spec.height * 0.95;
+  const isMobileLandscape = spec.width < 860 && spec.height < 520 && spec.width > spec.height * 1.2;
+  const isSide = isWideSide || isMobileLandscape;
+  const dockW = isSide
+    ? isMobileLandscape
+      ? Math.min(320, Math.max(250, Math.round(spec.width * 0.44)))
+      : spec.width >= 1120
+      ? 430
+      : spec.width >= 960
+      ? 390
+      : 350
+    : spec.width;
+  const arenaW = isSide ? Math.max(280, spec.width - dockW) : spec.width;
+  const arenaH = isSide ? spec.height : Math.round(spec.height * 0.52);
+  const enemyX = Math.round(arenaW * 0.67);
+  const enemyY = Math.round(arenaH * 0.71);
 
   // Phase 1 (~7.5s): Active dungeon clicks + Space strikes
   for (let i = 0; i < 62; i++) {
@@ -194,9 +232,9 @@ async function captureY8StandardScreenshot(browser) {
   fs.mkdirSync(y8Dir, { recursive: true });
   const { context, page } = await createSeededContext(browser, 760, 570, null);
   const arenaW = 760;
-  const arenaH = Math.max(300, 570 * 0.52);
-  const enemyX = Math.round(arenaW * 0.65);
-  const enemyY = Math.round(arenaH * 0.72);
+  const arenaH = Math.round(570 * 0.52);
+  const enemyX = Math.round(arenaW * 0.67);
+  const enemyY = Math.round(arenaH * 0.71);
   await page.keyboard.press('1');
   for (let i = 0; i < 8; i++) {
     await page.mouse.click(enemyX, enemyY);

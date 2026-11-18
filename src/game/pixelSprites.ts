@@ -1068,9 +1068,236 @@ const ENEMY_GRIDS: Record<string, { grid: string[]; palette: SpritePalette }> = 
   },
 };
 
-export function getHeroSprite(heroId: string): HTMLCanvasElement {
+interface RaceVisualProfile {
+  skin: string;
+  skinDark: string;
+  eye: string;
+  hair: string;
+  trim: string;
+  feature:
+    | 'human'
+    | 'dwarf'
+    | 'night_elf'
+    | 'gnome'
+    | 'skyborne_alliance'
+    | 'orc'
+    | 'undead'
+    | 'tauren'
+    | 'troll'
+    | 'skyborne_horde';
+}
+
+const RACE_VISUALS: Record<string, RaceVisualProfile> = {
+  human: {
+    skin: '#fed7aa',
+    skinDark: '#fdba74',
+    eye: '#0f172a',
+    hair: '#b45309',
+    trim: '#3b82f6',
+    feature: 'human',
+  },
+  dwarf: {
+    skin: '#fdba74',
+    skinDark: '#ea580c',
+    eye: '#0f172a',
+    hair: '#d97706',
+    trim: '#f59e0b',
+    feature: 'dwarf',
+  },
+  night_elf: {
+    skin: '#c4b5fd',
+    skinDark: '#8b5cf6',
+    eye: '#67e8f9',
+    hair: '#10b981',
+    trim: '#34d399',
+    feature: 'night_elf',
+  },
+  gnome: {
+    skin: '#fecdd3',
+    skinDark: '#fda4af',
+    eye: '#0ea5e9',
+    hair: '#f472b6',
+    trim: '#38bdf8',
+    feature: 'gnome',
+  },
+  skyborne_alliance: {
+    skin: '#e0f2fe',
+    skinDark: '#bae6fd',
+    eye: '#fde047',
+    hair: '#f8fafc',
+    trim: '#38bdf8',
+    feature: 'skyborne_alliance',
+  },
+  orc: {
+    skin: '#4ade80',
+    skinDark: '#16a34a',
+    eye: '#ef4444',
+    hair: '#1e293b',
+    trim: '#dc2626',
+    feature: 'orc',
+  },
+  undead: {
+    skin: '#94a3b8',
+    skinDark: '#64748b',
+    eye: '#facc15',
+    hair: '#475569',
+    trim: '#a855f7',
+    feature: 'undead',
+  },
+  tauren: {
+    skin: '#92400e',
+    skinDark: '#78350f',
+    eye: '#fde047',
+    hair: '#451a03',
+    trim: '#d97706',
+    feature: 'tauren',
+  },
+  troll: {
+    skin: '#2dd4bf',
+    skinDark: '#0d9488',
+    eye: '#fde047',
+    hair: '#ef4444',
+    trim: '#f97316',
+    feature: 'troll',
+  },
+  skyborne_horde: {
+    skin: '#bae6fd',
+    skinDark: '#7dd3fc',
+    eye: '#fb923c',
+    hair: '#4c1d95',
+    trim: '#f59e0b',
+    feature: 'skyborne_horde',
+  },
+};
+
+function px(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, w = 1, h = 1) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, w, h);
+}
+
+export function getHeroSprite(heroId: string, raceId = 'human'): HTMLCanvasElement {
+  const cacheKey = `hero_${heroId}_${raceId}`;
+  const cached = spriteCache.get(cacheKey);
+  if (cached) return cached;
+
   const def = HERO_GRIDS[heroId] || HERO_GRIDS.warrior;
-  return bakePixelSprite(`hero_${heroId}`, def.grid, def.palette, false);
+  const race = RACE_VISUALS[raceId] || RACE_VISUALS.human;
+
+  const palette: SpritePalette = { ...def.palette };
+  if (heroId !== 'warlock') {
+    if (palette.F) palette.F = race.skin;
+    if (palette.E) palette.E = race.eye;
+  } else {
+    // Warlock uses V/P for cowl & F for fel flame; tint cowl highlight by race
+    palette.V = race.trim;
+  }
+  if (heroId === 'paladin' && palette.H) {
+    palette.H = race.hair;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 20;
+  canvas.height = 18;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    const gridH = def.grid.length;
+    const ox = 2;
+    const oy = 18 - gridH; // anchor feet cleanly at bottom (y=17)
+    const isMage = heroId === 'mage';
+    const faceY = isMage ? oy + 5 : oy + 4;
+
+    // 1. Back-layer racial wings for Skyborne races
+    if (race.feature === 'skyborne_alliance' || race.feature === 'skyborne_horde') {
+      const wingMain = race.feature === 'skyborne_alliance' ? '#f8fafc' : '#581c87';
+      const wingTip = race.feature === 'skyborne_alliance' ? '#38bdf8' : '#fb923c';
+      const outline = '#0b0e14';
+      // Left wing
+      px(ctx, 0, oy + 4, outline, 2, 1);
+      px(ctx, 0, oy + 5, wingTip, 2, 2);
+      px(ctx, 1, oy + 6, wingMain, 2, 4);
+      px(ctx, 0, oy + 7, outline, 1, 3);
+      px(ctx, 1, oy + 10, outline, 2, 1);
+      // Right wing
+      px(ctx, 15, oy + 4, outline, 2, 1);
+      px(ctx, 15, oy + 5, wingTip, 2, 2);
+      px(ctx, 14, oy + 6, wingMain, 2, 4);
+      px(ctx, 16, oy + 7, outline, 1, 3);
+      px(ctx, 14, oy + 10, outline, 2, 1);
+    }
+
+    // 2. Draw base class sprite with racial skin & eye palette
+    for (let y = 0; y < gridH; y++) {
+      const row = def.grid[y];
+      for (let x = 0; x < row.length; x++) {
+        const ch = row[x];
+        if (ch === '.' || ch === ' ') continue;
+        const color = palette[ch];
+        if (!color) continue;
+        px(ctx, ox + x, oy + y, color);
+      }
+    }
+
+    // 3. Warlock visible racial face inside hood
+    if (heroId === 'warlock') {
+      px(ctx, ox + 5, oy + 4, race.skin, 2, 1);
+      px(ctx, ox + 5, oy + 4, race.eye, 1, 1);
+      px(ctx, ox + 7, oy + 4, race.eye, 1, 1);
+      px(ctx, ox + 5, oy + 5, race.skinDark, 3, 1);
+    }
+
+    // 4. Foreground racial silhouette features (ears, horns, beard, tusks, mohawk, goggles)
+    if (race.feature === 'dwarf') {
+      // Thick braided dwarf beard + ginger/amber brow
+      px(ctx, ox + 4, faceY + 1, race.hair, 5, 2);
+      px(ctx, ox + 5, faceY + 3, race.hair, 3, 1);
+      px(ctx, ox + 6, faceY + 2, '#fbbf24', 1, 1); // beard clasp
+    } else if (race.feature === 'night_elf') {
+      // Long pointed elven ears sticking out both sides
+      px(ctx, ox + 1, faceY - 1, '#0b0e14', 2, 1);
+      px(ctx, ox + 1, faceY, race.skin, 2, 1);
+      px(ctx, ox + 10, faceY - 1, '#0b0e14', 2, 1);
+      px(ctx, ox + 10, faceY, race.skin, 2, 1);
+      px(ctx, ox + 5, faceY - 2, race.hair, 3, 1);
+    } else if (race.feature === 'gnome') {
+      // Tinkerer brass goggles + bright hair tuft
+      px(ctx, ox + 4, faceY - 2, race.hair, 5, 1);
+      px(ctx, ox + 4, faceY - 1, '#38bdf8', 2, 1);
+      px(ctx, ox + 7, faceY - 1, '#38bdf8', 2, 1);
+      px(ctx, ox + 6, faceY - 1, '#facc15', 1, 1);
+    } else if (race.feature === 'orc') {
+      // Prominent lower tusks + Horde crimson shoulder stud
+      px(ctx, ox + 4, faceY + 1, '#f8fafc', 1, 1);
+      px(ctx, ox + 8, faceY + 1, '#f8fafc', 1, 1);
+      px(ctx, ox + 2, oy + 7, '#dc2626', 2, 2);
+    } else if (race.feature === 'undead') {
+      // Exposed bone jaw + glowing Forsaken eye flare + rib stripe
+      px(ctx, ox + 5, faceY + 1, '#cbd5e1', 3, 1);
+      px(ctx, ox + 4, faceY, race.eye, 1, 1);
+      px(ctx, ox + 8, faceY, race.eye, 1, 1);
+      px(ctx, ox + 6, oy + 8, '#cbd5e1', 2, 1);
+    } else if (race.feature === 'tauren') {
+      // Curved ivory bull horns + broad snout
+      px(ctx, ox + 1, oy + 1, '#f8fafc', 1, 2);
+      px(ctx, ox + 2, oy + 2, '#e2e8f0', 2, 1);
+      px(ctx, ox + 11, oy + 1, '#f8fafc', 1, 2);
+      px(ctx, ox + 9, oy + 2, '#e2e8f0', 2, 1);
+      px(ctx, ox + 5, faceY + 1, '#451a03', 3, 1);
+    } else if (race.feature === 'troll') {
+      // Tall crimson mohawk + pointed ears + tusks
+      px(ctx, ox + 5, Math.max(0, oy - 1), race.hair, 3, 2);
+      px(ctx, ox + 6, Math.max(0, oy - 2), '#fb923c', 1, 1);
+      px(ctx, ox + 1, faceY, race.skin, 2, 1);
+      px(ctx, ox + 10, faceY, race.skin, 2, 1);
+      px(ctx, ox + 4, faceY + 1, '#f8fafc', 1, 1);
+      px(ctx, ox + 8, faceY + 1, '#f8fafc', 1, 1);
+    } else if (race.feature === 'human') {
+      // Royal Stormwind crest glint
+      px(ctx, ox + 6, oy + 1, '#facc15', 2, 1);
+    }
+  }
+
+  spriteCache.set(cacheKey, canvas);
+  return canvas;
 }
 
 export function getEnemySprite(enemyId: string): HTMLCanvasElement {

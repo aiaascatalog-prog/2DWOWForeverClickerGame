@@ -30,6 +30,60 @@ export type Faction = 'Alliance' | 'Horde';
 export type EnemyTier = 'normal' | 'elite' | 'rare' | 'rare_elite' | 'boss';
 export type SkillId = 'frenzy' | 'gold_rush' | 'smite';
 
+export type ClassAttackStyle =
+  | 'cleave'
+  | 'arrow'
+  | 'holy_beam'
+  | 'frost_orb'
+  | 'dual_slash'
+  | 'lightning'
+  | 'hammer_wave'
+  | 'moonfire'
+  | 'fel_bolt';
+
+export type AutoSkillVisual =
+  | 'cleave'
+  | 'whirlwind'
+  | 'arrow'
+  | 'volley'
+  | 'holy'
+  | 'shadow_aoe'
+  | 'frost'
+  | 'arcane_barrage'
+  | 'dual'
+  | 'fan_knives'
+  | 'lightning'
+  | 'lava'
+  | 'hammer'
+  | 'consecrate'
+  | 'moonfire'
+  | 'starfall'
+  | 'fel_bolt'
+  | 'rain_of_fire';
+
+export interface PrimaryAttackDef {
+  id: string;
+  name: LocalizedText;
+  description: LocalizedText;
+  style: ClassAttackStyle;
+  color: string;
+  powerMult: number;
+  baseCost: number;
+}
+
+export interface ClassAutoSkillDef {
+  id: string;
+  name: LocalizedText;
+  description: LocalizedText;
+  cooldownSec: number;
+  damageMult: number;
+  upgradeBaseCost: number;
+  aoe: boolean;
+  effect: AutoSkillVisual;
+  color: string;
+  special?: 'chill' | 'gold_steal' | 'shield' | 'boss_bonus' | 'crit_guaranteed';
+}
+
 export interface LocalizedText {
   en: string;
   'zh-TW': string;
@@ -72,8 +126,12 @@ export interface HeroDef {
   name: LocalizedText;
   title: LocalizedText;
   defaultRace: RaceId;
+  attackStyle: ClassAttackStyle;
+  primaryAttack: PrimaryAttackDef;
+  autoSkills: [ClassAutoSkillDef, ClassAutoSkillDef];
   bonusLabel: (rank: number, locale: Locale) => string;
   unlockCost: number;
+  switchCostBase: number;
   upgradeBaseCost: number;
   upgradeMultiplier: number;
   accent: string;
@@ -140,6 +198,7 @@ export interface DungeonZone {
 export interface SaveState {
   gold: number;
   lifetimeGold: number;
+  stolenGoldBank: number;
   floor: number;
   maxFloor: number;
   killsOnFloor: number;
@@ -153,8 +212,11 @@ export interface SaveState {
   ascensionCount: number;
   activeHero: HeroId;
   activeRace: RaceId;
+  raceLocked: boolean;
   unlockedHeroes: HeroId[];
   heroRanks: Record<HeroId, number>;
+  classAttackLevels: Record<HeroId, number>;
+  classSkillLevels: Record<string, number>;
   upgrades: Record<string, number>;
   skillLevels: Record<SkillId, number>;
   relics: Record<string, number>;
@@ -163,7 +225,8 @@ export interface SaveState {
 }
 
 export interface AdModalState {
-  type: 'damage2x' | 'offline';
+  type: 'damage2x' | 'offline' | 'coin_ward' | 'haste2x' | 'reclaim_gold' | 'boss_second_wind';
   secondsLeft: number;
   offlineAmount?: number;
+  reclaimAmount?: number;
 }

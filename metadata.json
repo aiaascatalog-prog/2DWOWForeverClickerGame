@@ -1,6 +1,6 @@
 {
-  "name": "Dinosaur Clicker",
-  "description": "Build your AI empire from a garage GPU to AGI Singularity. Click to mint tokens, deploy auto-scripts, upgrade server clusters, and trigger 10x Fever Mode.",
+  "name": "World of Dungeons: Forever Clicker",
+  "description": "Lead 9 heroic classes and 9 races through 9 dungeons and 3 epic raids in World of Dungeons: Forever Clicker. Tap to strike, slay Rare Elites, cast skills, and ascend in crisp 2D pixel art.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

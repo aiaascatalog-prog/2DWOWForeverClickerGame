@@ -1,6 +1,9 @@
 node_modules/
 build/
 dist/
+dist-cg/
+media-output/
+*.zip
 coverage/
 .DS_Store
 *.log

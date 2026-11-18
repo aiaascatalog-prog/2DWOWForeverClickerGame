@@ -28,7 +28,7 @@ jobs:
         run: npm install --legacy-peer-deps
 
       - name: TypeScript type check
-        run: npx tsc --noEmit
+        run: npm run lint
 
       - name: Build generic static bundle (Y8 / GamePix / itch.io / Pages)
         run: npm run build
@@ -38,11 +38,9 @@ jobs:
         run: zip -r ../game-portal-release.zip .
 
       - name: Build CrazyGames SDK v3 bundle & package crazygames-release.zip
-        env:
-          VITE_PORTAL: crazygames
         run: |
           rm -rf dist-cg
-          npx vite build --outDir dist-cg
+          npm run build:crazygames
           (cd dist-cg && zip -r ../crazygames-release.zip .)
 
       - name: Upload game-portal-release.zip Artifact (Y8 / GamePix / itch.io)
