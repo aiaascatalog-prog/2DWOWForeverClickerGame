@@ -238,6 +238,7 @@ export default function App() {
   const [bossSecondsLeft, setBossSecondsLeft] = useState<number | null>(null);
   const [showHelp, setShowHelp] = useState(false);
   const [adModal, setAdModal] = useState<AdModalState | null>(null);
+  const [sdkAdActive, setSdkAdActive] = useState(false);
   const [offlinePending, setOfflinePending] = useState<number | null>(null);
   const [toastTitle, setToastTitle] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -477,7 +478,7 @@ export default function App() {
 
   // Buff & Skill cooldown tick (10Hz)
   useEffect(() => {
-    if (screen !== 'playing' || adModal || offlinePending || showHelp) return;
+    if (screen !== 'playing' || adModal || sdkAdActive || offlinePending || showHelp) return;
     const id = setInterval(() => {
       setDamage2xLeft((prev) => (prev > 0 ? Math.max(0, prev - 0.1) : 0));
       setCoinWardLeft((prev) => (prev > 0 ? Math.max(0, prev - 0.1) : 0));
@@ -495,7 +496,7 @@ export default function App() {
       }));
     }, 100);
     return () => clearInterval(id);
-  }, [screen, adModal, offlinePending, showHelp]);
+  }, [screen, adModal, sdkAdActive, offlinePending, showHelp]);
 
   // Fallback Ad modal countdown
   useEffect(() => {
@@ -901,7 +902,7 @@ export default function App() {
   }, [pendingEmblems]);
 
   const startDamage2xAd = useCallback(() => {
-    if (damage2xLeft > 0) return;
+    if (damage2xLeft > 0 || sdkAdActive) return;
     if (isTrailerMode) {
       setDamage2xLeft(DAMAGE_BOOST_DURATION_SEC);
       soundEngine.playSkillCast();
@@ -916,12 +917,17 @@ export default function App() {
       () => {
         platformSDK.gameplayStop();
         setAdModal({ type: 'damage2x', secondsLeft: 3 });
+      },
+      {
+        onStart: () => setSdkAdActive(true),
+        onError: () => setToastTitle(t.adUnavailable),
+        onDone: () => setSdkAdActive(false),
       }
     );
-  }, [damage2xLeft, isTrailerMode]);
+  }, [damage2xLeft, sdkAdActive, isTrailerMode, t.adUnavailable]);
 
   const startCoinWardAd = useCallback(() => {
-    if (coinWardLeft > 0) return;
+    if (coinWardLeft > 0 || sdkAdActive) return;
     if (isTrailerMode) {
       setCoinWardLeft(DAMAGE_BOOST_DURATION_SEC);
       soundEngine.playShieldBlock();
@@ -936,12 +942,17 @@ export default function App() {
       () => {
         platformSDK.gameplayStop();
         setAdModal({ type: 'coin_ward', secondsLeft: 3 });
+      },
+      {
+        onStart: () => setSdkAdActive(true),
+        onError: () => setToastTitle(t.adUnavailable),
+        onDone: () => setSdkAdActive(false),
       }
     );
-  }, [coinWardLeft, isTrailerMode]);
+  }, [coinWardLeft, sdkAdActive, isTrailerMode, t.adUnavailable]);
 
   const startHaste2xAd = useCallback(() => {
-    if (haste2xLeft > 0) return;
+    if (haste2xLeft > 0 || sdkAdActive) return;
     if (isTrailerMode) {
       setHaste2xLeft(180);
       soundEngine.playSkillCast();
@@ -956,11 +967,17 @@ export default function App() {
       () => {
         platformSDK.gameplayStop();
         setAdModal({ type: 'haste2x', secondsLeft: 3 });
+      },
+      {
+        onStart: () => setSdkAdActive(true),
+        onError: () => setToastTitle(t.adUnavailable),
+        onDone: () => setSdkAdActive(false),
       }
     );
-  }, [haste2xLeft, isTrailerMode]);
+  }, [haste2xLeft, sdkAdActive, isTrailerMode, t.adUnavailable]);
 
   const startReclaimGoldAd = useCallback(() => {
+    if (sdkAdActive) return;
     const bank = saveRef.current.stolenGoldBank;
     if (bank <= 0) return;
     const reclaimAmount = Math.max(15, Math.ceil(bank * 1.5));
@@ -990,11 +1007,17 @@ export default function App() {
       () => {
         platformSDK.gameplayStop();
         setAdModal({ type: 'reclaim_gold', secondsLeft: 3, reclaimAmount });
+      },
+      {
+        onStart: () => setSdkAdActive(true),
+        onError: () => setToastTitle(t.adUnavailable),
+        onDone: () => setSdkAdActive(false),
       }
     );
-  }, [isTrailerMode]);
+  }, [sdkAdActive, isTrailerMode, t.adUnavailable]);
 
   const startBossSecondWindAd = useCallback(() => {
+    if (sdkAdActive) return;
     if (isTrailerMode) {
       canvasRef.current?.triggerBossSecondWind();
       setBossSecondWindLeft(0);
@@ -1011,12 +1034,17 @@ export default function App() {
       () => {
         platformSDK.gameplayStop();
         setAdModal({ type: 'boss_second_wind', secondsLeft: 3 });
+      },
+      {
+        onStart: () => setSdkAdActive(true),
+        onError: () => setToastTitle(t.adUnavailable),
+        onDone: () => setSdkAdActive(false),
       }
     );
-  }, [isTrailerMode]);
+  }, [sdkAdActive, isTrailerMode, t.adUnavailable]);
 
   const startOfflineDoubleAd = useCallback(() => {
-    if (!offlinePending) return;
+    if (!offlinePending || sdkAdActive) return;
     const amount = offlinePending;
     platformSDK.requestRewardedAd(
       () => {
@@ -1031,9 +1059,14 @@ export default function App() {
       () => {
         platformSDK.gameplayStop();
         setAdModal({ type: 'offline', secondsLeft: 3, offlineAmount: amount });
+      },
+      {
+        onStart: () => setSdkAdActive(true),
+        onError: () => setToastTitle(t.adUnavailable),
+        onDone: () => setSdkAdActive(false),
       }
     );
-  }, [offlinePending]);
+  }, [offlinePending, sdkAdActive, t.adUnavailable]);
 
   const claimAdReward = useCallback(() => {
     if (!adModal || adModal.secondsLeft > 0) return;
@@ -1156,7 +1189,7 @@ export default function App() {
         return;
       }
 
-      if (screen !== 'playing' || adModal || offlinePending || showHelp) return;
+      if (screen !== 'playing' || adModal || sdkAdActive || offlinePending || showHelp) return;
 
       if (e.code === 'Space') {
         canvasRef.current?.triggerPlayerAttack();
@@ -1170,7 +1203,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown, { passive: false });
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [screen, adModal, offlinePending, showHelp, enterGame, togglePause, castSkill]);
+  }, [screen, adModal, sdkAdActive, offlinePending, showHelp, enterGame, togglePause, castSkill]);
 
   const bossFloor = isBossFloor(save.floor);
   const floorProgressPct = bossFloor
@@ -1194,7 +1227,7 @@ export default function App() {
       {/* 2D Pixel-Art Dungeon Stage */}
       <GameCanvas
         ref={canvasRef}
-        isPlaying={screen === 'playing' && !adModal && !offlinePending && !showHelp}
+        isPlaying={screen === 'playing' && !adModal && !sdkAdActive && !offlinePending && !showHelp}
         floor={save.floor}
         killsOnFloor={save.killsOnFloor}
         activeHero={save.activeHero}
@@ -1404,9 +1437,9 @@ export default function App() {
               <div className="pointer-events-auto flex flex-col gap-1 items-start max-w-[140px] sm:max-w-[200px]">
                 <button
                   onClick={startDamage2xAd}
-                  disabled={damage2xLeft > 0}
+                  disabled={damage2xLeft > 0 || sdkAdActive}
                   className={`pixel-btn-gold rounded-xl px-2 py-1 sm:px-2.5 sm:py-1.5 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition ${
-                    damage2xLeft > 0 ? 'opacity-95' : ''
+                    damage2xLeft > 0 || sdkAdActive ? 'opacity-95' : ''
                   }`}
                 >
                   <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-slate-950 border border-amber-950 flex items-center justify-center shrink-0">
@@ -1427,7 +1460,7 @@ export default function App() {
                 <div className="flex flex-wrap items-center gap-1">
                   <button
                     onClick={startCoinWardAd}
-                    disabled={coinWardLeft > 0}
+                    disabled={coinWardLeft > 0 || sdkAdActive}
                     className={`rounded-lg px-1.5 py-0.5 sm:px-2 sm:py-1 flex items-center gap-1 border text-[10px] sm:text-[11px] font-bold cursor-pointer transition ${
                       coinWardLeft > 0
                         ? 'bg-sky-500/30 border-sky-300 text-sky-100'
@@ -1444,7 +1477,7 @@ export default function App() {
 
                   <button
                     onClick={startHaste2xAd}
-                    disabled={haste2xLeft > 0}
+                    disabled={haste2xLeft > 0 || sdkAdActive}
                     className={`rounded-lg px-1.5 py-0.5 sm:px-2 sm:py-1 flex items-center gap-1 border text-[10px] sm:text-[11px] font-bold cursor-pointer transition ${
                       haste2xLeft > 0
                         ? 'bg-violet-500/30 border-violet-300 text-violet-100'
@@ -1462,6 +1495,7 @@ export default function App() {
                   {save.stolenGoldBank > 0 && (
                     <button
                       onClick={startReclaimGoldAd}
+                      disabled={sdkAdActive}
                       className="pixel-btn-green rounded-lg px-1.5 py-0.5 sm:px-2 sm:py-1 flex items-center gap-1 text-[10px] sm:text-[11px] font-extrabold text-white cursor-pointer animate-pulse"
                     >
                       <Coins className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-300 shrink-0" />
@@ -1535,7 +1569,8 @@ export default function App() {
                 </span>
                 <button
                   onClick={startBossSecondWindAd}
-                  className="pixel-btn-gold px-3 py-1 rounded-lg font-pixel text-xs font-bold text-slate-950 cursor-pointer shrink-0"
+                  disabled={sdkAdActive}
+                  className="pixel-btn-gold px-3 py-1 rounded-lg font-pixel text-xs font-bold text-slate-950 cursor-pointer shrink-0 disabled:opacity-60"
                 >
                   {t.bossSecondWindCta}
                 </button>
@@ -2500,7 +2535,8 @@ export default function App() {
             <div className="flex flex-col gap-2">
               <button
                 onClick={startOfflineDoubleAd}
-                className="pixel-btn-gold w-full py-3 rounded-xl font-pixel text-base font-bold text-slate-950 cursor-pointer"
+                disabled={sdkAdActive}
+                className="pixel-btn-gold w-full py-3 rounded-xl font-pixel text-base font-bold text-slate-950 cursor-pointer disabled:opacity-60"
               >
                 {t.offlineDouble} (+{formatNumber(offlinePending * 2)})
               </button>

@@ -3,7 +3,7 @@ import { soundEngine } from '../audio/synth';
 interface CrazyGamesCallbacks {
   adStarted?: () => void;
   adFinished?: () => void;
-  adError?: (error: unknown) => void;
+  adError?: (error: unknown, errorData?: unknown) => void;
 }
 
 interface CrazyGamesSDKv3 {
@@ -28,6 +28,12 @@ interface CrazyGamesSDKv3 {
   };
 }
 
+export interface RewardedAdCallbacks {
+  onStart?: () => void;
+  onError?: (reason: string) => void;
+  onDone?: () => void;
+}
+
 declare global {
   interface Window {
     CrazyGames?: {
@@ -37,53 +43,60 @@ declare global {
 }
 
 class PlatformSDK {
-  private initPromise: Promise<void> | null = null;
+  private sdkInitPromise: Promise<boolean> | null = null;
   private sdkReady = false;
   private isCrazyGamesEnv = false;
   private pendingGameplayState: 'start' | 'stop' | null = null;
+  private adRequestInFlight = false;
+
+  private ensureSdkInit(): Promise<boolean> {
+    if (this.sdkReady) return Promise.resolve(true);
+
+    const sdk = window.CrazyGames?.SDK;
+    if (!sdk || typeof sdk.init !== 'function') {
+      return Promise.resolve(false);
+    }
+
+    if (!this.sdkInitPromise) {
+      this.sdkInitPromise = sdk
+        .init()
+        .then(() => {
+          const env = sdk.environment;
+          if (env === 'disabled') {
+            this.sdkReady = false;
+            this.isCrazyGamesEnv = false;
+            return false;
+          }
+
+          this.sdkReady = true;
+          this.isCrazyGamesEnv = env === 'crazygames';
+
+          if (this.pendingGameplayState === 'start') {
+            this.gameplayStart();
+          } else if (this.pendingGameplayState === 'stop') {
+            this.gameplayStop();
+          }
+          this.pendingGameplayState = null;
+          return true;
+        })
+        .catch(() => {
+          this.sdkReady = false;
+          this.isCrazyGamesEnv = false;
+          this.sdkInitPromise = null;
+          return false;
+        });
+    }
+
+    return this.sdkInitPromise;
+  }
 
   public async init(): Promise<void> {
-    if (this.initPromise) return this.initPromise;
-
-    this.initPromise = (async () => {
-      const sdk = window.CrazyGames?.SDK;
-      if (!sdk || typeof sdk.init !== 'function') return;
-
-      try {
-        const result = await Promise.race([
-          sdk.init().then(() => 'ok' as const),
-          new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 2500)),
-        ]);
-
-        if (result !== 'ok') {
-          this.sdkReady = false;
-          this.isCrazyGamesEnv = false;
-          return;
-        }
-
-        const env = sdk.environment;
-        if (env === 'disabled') {
-          this.sdkReady = false;
-          this.isCrazyGamesEnv = false;
-          return;
-        }
-
-        this.sdkReady = true;
-        this.isCrazyGamesEnv = env === 'crazygames';
-
-        if (this.pendingGameplayState === 'start') {
-          this.gameplayStart();
-        } else if (this.pendingGameplayState === 'stop') {
-          this.gameplayStop();
-        }
-        this.pendingGameplayState = null;
-      } catch {
-        this.sdkReady = false;
-        this.isCrazyGamesEnv = false;
-      }
-    })();
-
-    return this.initPromise;
+    const initTask = this.ensureSdkInit();
+    // Do not block initial UI/cloud load past 2.5s, while still letting sdk.init() finish in background
+    await Promise.race([
+      initTask,
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2500)),
+    ]);
   }
 
   public isCrazyGames(): boolean {
@@ -148,34 +161,88 @@ class PlatformSDK {
   public requestRewardedAd(
     onReward: () => void,
     onFallbackModal: () => void,
-    onDone?: () => void
+    doneOrOptions?: (() => void) | RewardedAdCallbacks
   ): void {
-    const adModule = window.CrazyGames?.SDK?.ad;
-    if (this.sdkReady && adModule && typeof adModule.requestAd === 'function') {
-      this.gameplayStop();
-      soundEngine.setAdPaused(true);
+    if (this.adRequestInFlight) return;
 
-      adModule.requestAd('rewarded', {
-        adStarted: () => {
-          soundEngine.setAdPaused(true);
-        },
-        adFinished: () => {
+    const callbacks: RewardedAdCallbacks =
+      typeof doneOrOptions === 'function' ? { onDone: doneOrOptions } : doneOrOptions ?? {};
+
+    void this.runRewardedAd(onReward, onFallbackModal, callbacks);
+  }
+
+  private async runRewardedAd(
+    onReward: () => void,
+    onFallbackModal: () => void,
+    { onStart, onError, onDone }: RewardedAdCallbacks
+  ): Promise<void> {
+    const sdk = window.CrazyGames?.SDK;
+    if (sdk && sdk.environment !== 'disabled') {
+      if (!this.sdkReady) {
+        await Promise.race([
+          this.ensureSdkInit(),
+          new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 6000)),
+        ]);
+      }
+
+      const adModule = window.CrazyGames?.SDK?.ad;
+      if (this.sdkReady && adModule && typeof adModule.requestAd === 'function') {
+        this.adRequestInFlight = true;
+        onStart?.();
+        this.gameplayStop();
+        soundEngine.setAdPaused(true);
+
+        let settled = false;
+        const finishAd = (granted: boolean, errorReason?: string) => {
+          if (settled) return;
+          settled = true;
+          this.adRequestInFlight = false;
           soundEngine.setAdPaused(false);
           this.gameplayStart();
-          onReward();
+          if (granted) {
+            onReward();
+          } else if (errorReason) {
+            onError?.(errorReason);
+          }
           onDone?.();
-        },
-        adError: () => {
-          soundEngine.setAdPaused(false);
-          this.gameplayStart();
-          onDone?.();
-        },
-      });
-      return;
+        };
+
+        try {
+          adModule.requestAd('rewarded', {
+            adStarted: () => {
+              soundEngine.setAdPaused(true);
+              this.gameplayStop();
+            },
+            adFinished: () => {
+              finishAd(true);
+            },
+            adError: (error, errorData) => {
+              const reason = extractAdErrorReason(error, errorData);
+              finishAd(false, reason);
+            },
+          });
+        } catch (error) {
+          finishAd(false, extractAdErrorReason(error));
+        }
+        return;
+      }
     }
 
     onFallbackModal();
   }
+}
+
+function extractAdErrorReason(error: unknown, errorData?: unknown): string {
+  for (const candidate of [errorData, error]) {
+    if (typeof candidate === 'string' && candidate.trim()) return candidate;
+    if (candidate && typeof candidate === 'object') {
+      const obj = candidate as Record<string, unknown>;
+      if (typeof obj.code === 'string' && obj.code) return obj.code;
+      if (typeof obj.reason === 'string' && obj.reason) return obj.reason;
+      if (typeof obj.message === 'string' && obj.message) return obj.message;
+    }
+  }
+  return 'unfilled';
 }
 
 export const platformSDK = new PlatformSDK();

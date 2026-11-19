@@ -1216,6 +1216,7 @@ export const UI_COPY: Record<
     adOffline: string;
     adWait: string;
     adClaim: string;
+    adUnavailable: string;
     tapDmgShort: string;
     dpsShort: string;
   }
@@ -1303,6 +1304,7 @@ export const UI_COPY: Record<
     adOffline: 'Double Your Offline Raid Loot',
     adWait: 'Summoning reward...',
     adClaim: 'Claim Reward',
+    adUnavailable: 'Ad unavailable right now — try again shortly',
     tapDmgShort: 'Tap',
     dpsShort: 'Skill',
   },
@@ -1388,6 +1390,7 @@ export const UI_COPY: Record<
     adOffline: '雙倍領取離線戰利品',
     adWait: '獎勵載入中...',
     adClaim: '領取獎勵',
+    adUnavailable: '暫無可用廣告，請稍後再試',
     tapDmgShort: '點擊',
     dpsShort: '奧義',
   },
@@ -1473,6 +1476,7 @@ export const UI_COPY: Record<
     adOffline: '双倍领取离线战利品',
     adWait: '奖励加载中...',
     adClaim: '领取奖励',
+    adUnavailable: '暂无可用广告，请稍后再试',
     tapDmgShort: '点击',
     dpsShort: '奥义',
   },
