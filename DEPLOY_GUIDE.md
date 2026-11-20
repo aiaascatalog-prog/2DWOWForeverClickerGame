@@ -49,7 +49,7 @@
 | **Start Screen 與種族／玩法說明** | ✅ 通過 | 開局標題畫面整合 10 種族／陣營選擇器（開始後鎖定種族與外觀）、`Start Game` / `Continue Quest`、`How to Play`、音效開關與三語切換。 |
 | **CrazyGames SDK v3 生命週期** | ✅ 通過 | 實作 `init()`、`gameplayStart()`、`gameplayStop()`（含 Pause 與說明視窗）、`happytime()`、雲端存檔與完整 6 種激勵廣告回呼。 |
 | **視窗失焦靜音與防右鍵選單** | ✅ 通過 | 監聽 `visibilitychange` 自動暫停 Web Audio，並停用 `contextmenu` 與方向鍵／空白鍵頁面捲動。 |
-| **預錄腳本與封面素材** | ⚠️ 需注意 | `scripts/record-trailer.mjs` 已更新至最新存檔欄位（`raceLocked`、`classAttackLevels`、`classSkillLevels`、`stolenGoldBank`）；但 `src/assets/images/*` 仍保留舊版封面底圖，**上傳至 Y8 / CrazyGames 前請先替換為新版實機封面圖**。 |
+| **預錄腳本與封面素材** | ✅ 通過 | `scripts/record-trailer.mjs` 與 `.github/workflows/record-trailer.yml` 已全面對齊 **World of Dungeons: Forever Clicker**，並於 `src/assets/images/` 採用魔獸奇幻風「初階精靈德魯伊 → 鹿角套裝大德魯伊」2D 像素成長封面（16:9、2:3、1:1），同步套用至 Y8 與 CrazyGames 宣傳包。 |
 | **智慧財產權與命名審查 (IP Check)** | ⚠️ 需注意 | 遊戲主標題為 **World of Dungeons: Forever Clicker**，但部分副本／首領／種族名詞仍具特定奇幻 IP 關聯；若平台商業審查要求，建議改為原創地名與首領名。 |
 | **Google Fonts 外部字型載入** | ℹ️ 建議知悉 | `index.html` 引用 `fonts.googleapis.com`；若平台封鎖外部字型請求，CSS 已設定系統無襯線與等寬備援字型，不影響遊玩。 |
 
@@ -59,4 +59,4 @@
 
 執行 GitHub Actions 中的 **Generate Platform Media Pack (Y8 & CrazyGames)**（`.github/workflows/record-trailer.yml`），可選 `all`、`y8`、`crazygames` 或 `social`：
 - `scripts/record-trailer.mjs` 會透過 `?trailer=1` 自動注入已解鎖天裔（高階聖騎士 `paladin` × `skyborne_alliance`）第 15 層存檔並跳過標題畫面，在 `1280×720`、`960×720`、`1920×1080`、`800×1200` 與 `760×570` 視窗中自動點擊怪物、觸發職業專屬普攻／自動倒數技能與主動技能 `1`–`3`，錄製 17–18 秒實機畫面。
-- **提醒：** 片頭封面合成使用的底圖來自 `src/assets/images/`，正式投稿 CrazyGames / Y8 前請先替換為對應實機封面圖。
+- **說明：** 片頭封面與平台宣傳圖（Y8 `1920×1080`、`1080×1920`、`760×570` 與 CrazyGames `1920×1080`、`800×1200`、`800×800`）皆直接由 `src/assets/images/` 內的新版 2D 像素地城進化封面自動裁切生成。

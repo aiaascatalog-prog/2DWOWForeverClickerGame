@@ -76,9 +76,9 @@ jobs:
           cp game-portal-release.zip media-output/y8/game-portal-release.zip
 
           # Exact pixel promo images from generated artwork
-          ffmpeg -y -i src/assets/images/cover_banner_1794444460793.jpg -vf "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080" -q:v 2 media-output/y8/y8-promo-landscape-1920x1080.jpg
-          ffmpeg -y -i src/assets/images/cover_portrait_1794643037572.jpg -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -q:v 2 media-output/y8/y8-promo-portrait-1080x1920.jpg
-          ffmpeg -y -i src/assets/images/cover_banner_1794444460793.jpg -vf "scale=760:570:force_original_aspect_ratio=increase,crop=760:570" -q:v 2 media-output/y8/y8-promo-card-760x570.jpg
+          ffmpeg -y -i src/assets/images/wow_cover_banner_1795136456389.jpg -vf "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080" -q:v 2 media-output/y8/y8-promo-landscape-1920x1080.jpg
+          ffmpeg -y -i src/assets/images/wow_cover_portrait_1795136457045.jpg -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -q:v 2 media-output/y8/y8-promo-portrait-1080x1920.jpg
+          ffmpeg -y -i src/assets/images/wow_cover_banner_1795136456389.jpg -vf "scale=760:570:force_original_aspect_ratio=increase,crop=760:570" -q:v 2 media-output/y8/y8-promo-card-760x570.jpg
 
           # Y8 Gameplay Videos (>= 15s, starts straight in gameplay)
           ffmpeg -y -i media-output/raw/y8-video-16x9-1280x720.webm -t 18 -vf "fps=30,scale=1280:720,setsar=1,format=yuv420p" -c:v libx264 -preset fast -crf 20 -an -movflags +faststart media-output/y8/y8-video-16x9-1280x720.mp4
@@ -93,9 +93,9 @@ jobs:
           cp crazygames-release.zip media-output/crazygames/crazygames-release.zip
 
           # 3 Mandatory Cover Image Sizes
-          ffmpeg -y -i src/assets/images/cover_banner_1794444460793.jpg -vf "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080" -q:v 2 media-output/crazygames/crazygames-cover-landscape-1920x1080.jpg
-          ffmpeg -y -i src/assets/images/cover_portrait_1794643037572.jpg -vf "scale=800:1200:force_original_aspect_ratio=increase,crop=800:1200" -q:v 2 media-output/crazygames/crazygames-cover-portrait-800x1200.jpg
-          ffmpeg -y -i src/assets/images/game_icon_1794444460164.jpg -vf "scale=800:800:force_original_aspect_ratio=increase,crop=800:800" -q:v 2 media-output/crazygames/crazygames-cover-square-800x800.jpg
+          ffmpeg -y -i src/assets/images/wow_cover_banner_1795136456389.jpg -vf "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080" -q:v 2 media-output/crazygames/crazygames-cover-landscape-1920x1080.jpg
+          ffmpeg -y -i src/assets/images/wow_cover_portrait_1795136457045.jpg -vf "scale=800:1200:force_original_aspect_ratio=increase,crop=800:1200" -q:v 2 media-output/crazygames/crazygames-cover-portrait-800x1200.jpg
+          ffmpeg -y -i src/assets/images/wow_game_icon_1795136477647.jpg -vf "scale=800:800:force_original_aspect_ratio=increase,crop=800:800" -q:v 2 media-output/crazygames/crazygames-cover-square-800x800.jpg
 
           # CrazyGames Preview Videos: 0.5s static cover opening frame + 16.5s gameplay = 17s muted MP4
           ffmpeg -y -loop 1 -t 0.5 -i media-output/crazygames/crazygames-cover-landscape-1920x1080.jpg -i media-output/raw/crazygames-video-landscape-1920x1080-raw.webm \
