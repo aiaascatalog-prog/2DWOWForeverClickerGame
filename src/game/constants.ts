@@ -67,7 +67,7 @@ export const UPGRADES: UpgradeDef[] = [
   },
 ];
 
-// All 9 Races (10 Faction identities including Dual-Faction Skyborne) from WoW: Forever
+// All 9 Races (10 Faction identities including Dual-Faction Skyborne)
 export const RACES: RaceDef[] = [
   {
     id: 'human',
@@ -131,17 +131,17 @@ export const RACES: RaceDef[] = [
   },
   {
     id: 'undead',
-    name: { en: 'Undead (Forsaken)', 'zh-TW': '不死族 (被遺忘者)', 'zh-CN': '亡灵 (被遗忘者)' },
+    name: { en: 'Undead (Risen)', 'zh-TW': '不死族 (復生者)', 'zh-CN': '亡灵 (复生者)' },
     faction: 'Horde',
     classes: ['warrior', 'paladin', 'rogue', 'priest', 'mage', 'warlock'],
     newClassesInForever: ['paladin'],
-    traitName: { en: 'Will of Forsaken', 'zh-TW': '亡靈意志', 'zh-CN': '亡灵意志' },
+    traitName: { en: 'Will of the Risen', 'zh-TW': '復生意志', 'zh-CN': '复生意志' },
     traitDesc: { en: '+12% All Dmg & +10% Gold', 'zh-TW': '+12% 傷害與 +10% 金幣', 'zh-CN': '+12% 伤害与 +10% 金币' },
     bonus: { allDmg: 0.12, gold: 0.1 },
   },
   {
     id: 'tauren',
-    name: { en: 'Tauren', 'zh-TW': '牛頭人', 'zh-CN': '牛头人' },
+    name: { en: 'Minotaur', 'zh-TW': '蠻牛勇士', 'zh-CN': '蛮牛勇士' },
     faction: 'Horde',
     classes: ['warrior', 'hunter', 'shaman', 'druid'],
     newClassesInForever: [],
@@ -228,7 +228,7 @@ export const HEROES: HeroDef[] = [
   {
     id: 'hunter',
     name: { en: 'Hunter', 'zh-TW': '獵人', 'zh-CN': '猎人' },
-    title: { en: 'Zephras Marksman', 'zh-TW': '風嶼神射手', 'zh-CN': '风屿神射手' },
+    title: { en: 'Aetheris Marksman', 'zh-TW': '風嶼神射手', 'zh-CN': '风屿神射手' },
     defaultRace: 'skyborne_alliance',
     attackStyle: 'arrow',
     primaryAttack: {
@@ -334,7 +334,7 @@ export const HEROES: HeroDef[] = [
   {
     id: 'mage',
     name: { en: 'Mage', 'zh-TW': '法師', 'zh-CN': '法师' },
-    title: { en: 'Dalaran Arcanist', 'zh-TW': '達拉然奧術師', 'zh-CN': '达拉然奥术师' },
+    title: { en: 'Arcanum Spellbinder', 'zh-TW': '秘法奧術師', 'zh-CN': '秘法奥术师' },
     defaultRace: 'gnome',
     attackStyle: 'frost_orb',
     primaryAttack: {
@@ -387,7 +387,7 @@ export const HEROES: HeroDef[] = [
   {
     id: 'rogue',
     name: { en: 'Rogue', 'zh-TW': '盜賊', 'zh-CN': '潜行者' },
-    title: { en: 'Ravenholdt Assassin', 'zh-TW': '拉文霍德刺客', 'zh-CN': '拉文霍德刺客' },
+    title: { en: 'Shadowguild Assassin', 'zh-TW': '暗影行會刺客', 'zh-CN': '暗影行会刺客' },
     defaultRace: 'night_elf',
     attackStyle: 'dual_slash',
     primaryAttack: {
@@ -493,7 +493,7 @@ export const HEROES: HeroDef[] = [
   {
     id: 'paladin',
     name: { en: 'Paladin', 'zh-TW': '聖騎士', 'zh-CN': '圣骑士' },
-    title: { en: 'Forsaken Crusader', 'zh-TW': '永恆十字軍', 'zh-CN': '永恒十字军' },
+    title: { en: 'Ashen Crusader', 'zh-TW': '永恆十字軍', 'zh-CN': '永恒十字军' },
     defaultRace: 'undead',
     attackStyle: 'hammer_wave',
     primaryAttack: {
@@ -546,7 +546,7 @@ export const HEROES: HeroDef[] = [
   {
     id: 'druid',
     name: { en: 'Druid', 'zh-TW': '德魯伊', 'zh-CN': '德鲁伊' },
-    title: { en: 'Hyjal Moonkeeper', 'zh-TW': '海加爾月光守衛', 'zh-CN': '海加尔月光守卫' },
+    title: { en: 'Worldroot Moonkeeper', 'zh-TW': '世界樹月光守衛', 'zh-CN': '世界树月光守卫' },
     defaultRace: 'tauren',
     attackStyle: 'moonfire',
     primaryAttack: {
@@ -728,13 +728,13 @@ export const SKILLS: SkillDef[] = [
   },
 ];
 
-// Zephras Isle + All 9 New WoW: Forever Dungeons + All 3 Launch Raids!
+// Aetheris Isle + 9 Original Fantasy Dungeons + 3 Epic Launch Raids
 export const DUNGEON_ZONES: DungeonZone[] = [
   {
     index: 0,
     kind: 'zone',
     levelRange: 'Lv 1–13',
-    name: { en: 'Zephras Isle', 'zh-TW': '澤弗拉斯之島', 'zh-CN': '泽弗拉斯之岛' },
+    name: { en: 'Aetheris Isle', 'zh-TW': '艾瑟里斯之島', 'zh-CN': '艾瑟里斯之岛' },
     wallColor: '#1a2736',
     wallTrim: '#2d4761',
     floorColor: '#25332b',
@@ -777,7 +777,7 @@ export const DUNGEON_ZONES: DungeonZone[] = [
     index: 2,
     kind: 'dungeon',
     levelRange: 'Lv 15–20',
-    name: { en: 'Ruins of Lordaeron', 'zh-TW': '羅德隆廢墟', 'zh-CN': '洛丹伦废墟' },
+    name: { en: 'Ruins of Ashencrown', 'zh-TW': '燼冠廢墟', 'zh-CN': '烬冠废墟' },
     wallColor: '#1d1c2e',
     wallTrim: '#363254',
     floorColor: '#262436',
@@ -786,7 +786,7 @@ export const DUNGEON_ZONES: DungeonZone[] = [
     torchColor: '#a855f7',
     enemies: [
       { id: 'risen_guard', spriteId: 'deathguard', name: { en: 'Risen Sentinel', 'zh-TW': '復生哨兵', 'zh-CN': '复生哨兵' } },
-      { id: 'plague_ghoul', spriteId: 'ghoul', name: { en: 'Tirisfal Ghoul', 'zh-TW': '提里斯法食屍鬼', 'zh-CN': '提瑞斯法食尸鬼' } },
+      { id: 'plague_ghoul', spriteId: 'ghoul', name: { en: 'Ashen Ghoul', 'zh-TW': '灰燼食屍鬼', 'zh-CN': '灰烬食尸鬼' } },
       { id: 'abandoned', spriteId: 'banshee', name: { en: 'The Abandoned', 'zh-TW': '被遺棄的哀嚎女妖', 'zh-CN': '被遗弃的哀嚎女妖' } },
     ],
     rares: [
@@ -819,7 +819,7 @@ export const DUNGEON_ZONES: DungeonZone[] = [
     index: 4,
     kind: 'dungeon',
     levelRange: 'Lv 28–33',
-    name: { en: 'City of Dalaran', 'zh-TW': '達拉然城', 'zh-CN': '达拉然城' },
+    name: { en: 'Arcanum Spire', 'zh-TW': '奧秘尖塔', 'zh-CN': '奥秘尖塔' },
     wallColor: '#1e1938',
     wallTrim: '#433878',
     floorColor: '#251e42',
@@ -883,7 +883,7 @@ export const DUNGEON_ZONES: DungeonZone[] = [
     index: 7,
     kind: 'dungeon',
     levelRange: 'Lv 48–53',
-    name: { en: 'Alcaz Island Prison', 'zh-TW': '奧卡茲島監獄', 'zh-CN': '奥卡兹岛监狱' },
+    name: { en: 'Ironrock Island Prison', 'zh-TW': '鐵岩島監獄', 'zh-CN': '铁岩岛监狱' },
     wallColor: '#1f242d',
     wallTrim: '#394354',
     floorColor: '#262c36',
@@ -891,8 +891,8 @@ export const DUNGEON_ZONES: DungeonZone[] = [
     bannerColor: '#b91c1c',
     torchColor: '#f59e0b',
     enemies: [
-      { id: 'warden_jailer', spriteId: 'houndmaster', name: { en: 'Alcaz Jailer', 'zh-TW': '奧卡茲獄卒', 'zh-CN': '奥卡兹狱卒' } },
-      { id: 'prison_zealot', spriteId: 'zealot', name: { en: 'Defias Insurgent', 'zh-TW': '叛亂囚徒', 'zh-CN': '叛乱囚徒' } },
+      { id: 'warden_jailer', spriteId: 'houndmaster', name: { en: 'Ironrock Jailer', 'zh-TW': '鐵岩獄卒', 'zh-CN': '铁岩狱卒' } },
+      { id: 'prison_zealot', spriteId: 'zealot', name: { en: 'Crimson Insurgent', 'zh-TW': '赤紅叛亂囚徒', 'zh-CN': '赤红叛乱囚徒' } },
       { id: 'spider_guard', spriteId: 'nerubian', name: { en: 'Shadowweb Lurker', 'zh-TW': '暗網潛伏者', 'zh-CN': '暗网潜伏者' } },
     ],
     rares: [
@@ -914,7 +914,7 @@ export const DUNGEON_ZONES: DungeonZone[] = [
     enemies: [
       { id: 'fel_ancient', spriteId: 'fel_ancient', name: { en: 'Fel Ancient', 'zh-TW': '魔化古樹', 'zh-CN': '邪能古树' } },
       { id: 'blackmaw_fel', spriteId: 'felguard', name: { en: 'Blackmaw Felguard', 'zh-TW': '黑喉惡魔衛士', 'zh-CN': '黑喉恶魔卫士' } },
-      { id: 'flame_imp', spriteId: 'imp', name: { en: 'Hyjal Flamewaker', 'zh-TW': '喚焰魔侍', 'zh-CN': '唤焰魔侍' } },
+      { id: 'flame_imp', spriteId: 'imp', name: { en: 'Cinder Flamewaker', 'zh-TW': '餘燼喚焰魔侍', 'zh-CN': '余烬唤焰魔侍' } },
     ],
     rares: [
       { id: 'inquisitor_fel', spriteId: 'inquisitor', name: { en: 'Dread Pyromancer', 'zh-TW': '恐懼控火師', 'zh-CN': '恐惧控火师' }, tier: 'rare_elite' },
@@ -961,13 +961,13 @@ export const DUNGEON_ZONES: DungeonZone[] = [
     rares: [
       { id: 'barrow_banshee', spriteId: 'banshee', name: { en: 'Wailing Watcher', 'zh-TW': '哀嚎看守者', 'zh-CN': '哀嚎看守者' }, tier: 'rare_elite' },
     ],
-    boss: { id: 'illidan_echo', spriteId: 'boss_arugal', name: { en: "Illidan's Shadow", 'zh-TW': '伊利丹之影', 'zh-CN': '伊利丹之影' }, tier: 'boss' },
+    boss: { id: 'illidan_echo', spriteId: 'boss_arugal', name: { en: "Vaelor's Shadow", 'zh-TW': '維洛爾之影', 'zh-CN': '维洛尔之影' }, tier: 'boss' },
   },
   {
     index: 11,
     kind: 'raid20',
     levelRange: '20-Player Raid',
-    name: { en: 'Hyjal Summit', 'zh-TW': '海加爾山巔 (20人團隊)', 'zh-CN': '海加尔山巅 (20人团本)' },
+    name: { en: 'Worldroot Summit', 'zh-TW': '世界樹山巔 (20人團隊)', 'zh-CN': '世界树山巅 (20人团本)' },
     wallColor: '#1a2321',
     wallTrim: '#314540',
     floorColor: '#212b28',
@@ -975,7 +975,7 @@ export const DUNGEON_ZONES: DungeonZone[] = [
     bannerColor: '#047857',
     torchColor: '#34d399',
     enemies: [
-      { id: 'hyjal_ghoul', spriteId: 'ghoul', name: { en: 'Risen Scourge Fiend', 'zh-TW': '天譴魔兵', 'zh-CN': '天灾魔兵' } },
+      { id: 'hyjal_ghoul', spriteId: 'ghoul', name: { en: 'Risen Blight Fiend', 'zh-TW': '荒疫魔兵', 'zh-CN': '荒疫魔兵' } },
       { id: 'hyjal_fel', spriteId: 'fel_ancient', name: { en: 'Possessed Ancient', 'zh-TW': '附魔古樹', 'zh-CN': '附魔古树' } },
       { id: 'hyjal_deathguard', spriteId: 'deathguard', name: { en: 'Summit Dreadknight', 'zh-TW': '山巔恐懼騎士', 'zh-CN': '山巅恐惧骑士' } },
     ],
@@ -988,7 +988,7 @@ export const DUNGEON_ZONES: DungeonZone[] = [
     index: 12,
     kind: 'raid40',
     levelRange: '40-Player Raid',
-    name: { en: "Onyxia's Lair", 'zh-TW': '奧妮克希亞的巢穴 (40人)', 'zh-CN': '奥妮克希亚的巢穴 (40人)' },
+    name: { en: 'Obsidian Lair', 'zh-TW': '黑曜巨龍巢穴 (40人)', 'zh-CN': '黑曜巨龙巢穴 (40人)' },
     wallColor: '#261414',
     wallTrim: '#4f2424',
     floorColor: '#2e1818',
@@ -996,22 +996,22 @@ export const DUNGEON_ZONES: DungeonZone[] = [
     bannerColor: '#991b1b',
     torchColor: '#fb923c',
     enemies: [
-      { id: 'onyx_whelp', spriteId: 'wyrmling', name: { en: 'Onyxian Whelp', 'zh-TW': '奧妮克希亞雛龍', 'zh-CN': '奥妮克希亚雏龙' } },
-      { id: 'onyx_warder', spriteId: 'felguard', name: { en: 'Blackwing Warder', 'zh-TW': '黑翼看守者', 'zh-CN': '黑翼看守者' } },
+      { id: 'onyx_whelp', spriteId: 'wyrmling', name: { en: 'Obsidian Whelp', 'zh-TW': '黑曜雛龍', 'zh-CN': '黑曜雏龙' } },
+      { id: 'onyx_warder', spriteId: 'felguard', name: { en: 'Cinder Warder', 'zh-TW': '灰燼看守者', 'zh-CN': '灰烬看守者' } },
       { id: 'onyx_flame', spriteId: 'inquisitor', name: { en: 'Lair Pyromancer', 'zh-TW': '龍穴控火師', 'zh-CN': '龙穴控火师' } },
     ],
     rares: [
       { id: 'brood_elder', spriteId: 'wyrmling', name: { en: 'Elder Broodguard', 'zh-TW': '長老龍衛', 'zh-CN': '长老龙卫' }, tier: 'rare_elite' },
     ],
-    boss: { id: 'onyxia_boss', spriteId: 'onyxia', name: { en: 'Onyxia, Broodmother', 'zh-TW': '黑龍公主奧妮克希亞', 'zh-CN': '黑龙公主奥妮克希亚' }, tier: 'boss' },
+    boss: { id: 'onyxia_boss', spriteId: 'onyxia', name: { en: 'Obsidia, Cinder Broodmother', 'zh-TW': '灰燼龍母奧布西迪亞', 'zh-CN': '灰烬龙母奥布西迪亚' }, tier: 'boss' },
   },
 ];
 
 export const QUESTS: QuestDef[] = [
   {
     id: 'q_slay_15',
-    name: { en: 'Zephras Isle Patrol', 'zh-TW': '風嶼巡邏隊', 'zh-CN': '风屿巡逻队' },
-    description: { en: 'Slay 15 monsters across Azeroth', 'zh-TW': '擊敗 15 隻怪物', 'zh-CN': '击败 15 只怪物' },
+    name: { en: 'Aetheris Isle Patrol', 'zh-TW': '艾瑟里斯巡邏隊', 'zh-CN': '艾瑟里斯巡逻队' },
+    description: { en: 'Slay 15 monsters across the Realms', 'zh-TW': '擊敗 15 隻怪物', 'zh-CN': '击败 15 只怪物' },
     target: 15,
     rewardGold: 120,
     getProgress: (s) => s.totalKills,
@@ -1019,7 +1019,7 @@ export const QUESTS: QuestDef[] = [
   {
     id: 'q_floor_5',
     name: { en: 'Skyborne Departure', 'zh-TW': '天裔啟程', 'zh-CN': '天裔启程' },
-    description: { en: 'Clear Zephras Isle (Floor 5)', 'zh-TW': '通關澤弗拉斯之島 (第 5 層)', 'zh-CN': '通关泽弗拉斯之岛 (第 5 层)' },
+    description: { en: 'Clear Aetheris Isle (Floor 5)', 'zh-TW': '通關艾瑟里斯之島 (第 5 層)', 'zh-CN': '通关艾瑟里斯之岛 (第 5 层)' },
     target: 5,
     rewardGold: 400,
     rewardShards: 1,
@@ -1054,8 +1054,8 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: 'q_dalaran',
-    name: { en: 'Dome of Dalaran', 'zh-TW': '達拉然穹頂', 'zh-CN': '达拉然穹顶' },
-    description: { en: 'Reach City of Dalaran (Floor 21)', 'zh-TW': '抵達達拉然城 (第 21 層)', 'zh-CN': '抵达达拉然城 (第 21 层)' },
+    name: { en: 'Dome of Arcanum Spire', 'zh-TW': '奧秘尖塔穹頂', 'zh-CN': '奥秘尖塔穹顶' },
+    description: { en: 'Reach Arcanum Spire (Floor 21)', 'zh-TW': '抵達奧秘尖塔 (第 21 層)', 'zh-CN': '抵达奥秘尖塔 (第 21 层)' },
     target: 21,
     rewardGold: 32000,
     rewardShards: 4,
@@ -1063,7 +1063,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: 'q_slay_200',
-    name: { en: 'Azeroth Champion', 'zh-TW': '艾澤拉斯勇士', 'zh-CN': '艾泽拉斯勇士' },
+    name: { en: 'Realm Champion', 'zh-TW': '秘境守護勇士', 'zh-CN': '秘境守护勇士' },
     description: { en: 'Slay 200 monsters', 'zh-TW': '累計擊敗 200 隻怪物', 'zh-CN': '累计击败 200 只怪物' },
     target: 200,
     rewardGold: 22000,
@@ -1102,7 +1102,7 @@ export const QUESTS: QuestDef[] = [
 export const RELICS: RelicDef[] = [
   {
     id: 'warchief_totem',
-    name: { en: "Warchief's Totem", 'zh-TW': '大酋長圖騰', 'zh-CN': '大酋长图腾' },
+    name: { en: "Warlord's Totem", 'zh-TW': '督軍圖騰', 'zh-CN': '督军图腾' },
     description: { en: '+40% All Damage per rank', 'zh-TW': '每階 +40% 全體傷害', 'zh-CN': '每阶 +40% 全体伤害' },
     baseShardCost: 2,
     maxRank: 25,
@@ -1110,7 +1110,7 @@ export const RELICS: RelicDef[] = [
   },
   {
     id: 'gadgetzan_coin',
-    name: { en: 'Coin of Gadgetzan', 'zh-TW': '加基森幸運幣', 'zh-CN': '加基森幸运币' },
+    name: { en: 'Goblin Merchant Coin', 'zh-TW': '地精商會幸運幣', 'zh-CN': '地精商会幸运币' },
     description: { en: '+40% Gold Drops per rank', 'zh-TW': '每階 +40% 金幣掉落', 'zh-CN': '每阶 +40% 金币掉落' },
     baseShardCost: 2,
     maxRank: 25,
@@ -1126,7 +1126,7 @@ export const RELICS: RelicDef[] = [
   },
   {
     id: 'kirin_crystal',
-    name: { en: 'Kirin Tor Crystal', 'zh-TW': '祈倫托魔晶', 'zh-CN': '肯瑞托魔晶' },
+    name: { en: 'Arcane Spire Crystal', 'zh-TW': '奧術尖塔魔晶', 'zh-CN': '奥术尖塔魔晶' },
     description: { en: '+50% Auto Damage per rank', 'zh-TW': '每階 +50% 自動傷害', 'zh-CN': '每阶 +50% 自动伤害' },
     baseShardCost: 3,
     maxRank: 25,
@@ -1134,7 +1134,7 @@ export const RELICS: RelicDef[] = [
   },
   {
     id: 'heart_azeroth',
-    name: { en: 'Heart of Azeroth', 'zh-TW': '艾澤拉斯之心', 'zh-CN': '艾泽拉斯之心' },
+    name: { en: 'Heart of the Realm', 'zh-TW': '秘境之心', 'zh-CN': '秘境之心' },
     description: { en: '+3s Boss Timer & -8% Skill CD per rank', 'zh-TW': '每階 +3秒 首領限時與 -8% 技能冷卻', 'zh-CN': '每阶 +3秒 首领限时与 -8% 技能冷却' },
     baseShardCost: 4,
     maxRank: 8,

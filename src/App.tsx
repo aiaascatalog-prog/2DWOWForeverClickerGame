@@ -556,22 +556,25 @@ export default function App() {
     });
   }, []);
 
-  const handleTapStats = useCallback((isCrit: boolean) => {
-    const now = performance.now();
-    if (now - lastClickRef.current < 450) {
-      comboRef.current = Math.min(comboRef.current + 1, 18);
-    } else {
-      comboRef.current = 0;
-    }
-    lastClickRef.current = now;
-    soundEngine.playClick(isCrit, comboRef.current);
+  const handleTapStats = useCallback(
+    (isCrit: boolean) => {
+      const now = performance.now();
+      if (now - lastClickRef.current < 450) {
+        comboRef.current = Math.min(comboRef.current + 1, 18);
+      } else {
+        comboRef.current = 0;
+      }
+      lastClickRef.current = now;
+      soundEngine.playHit(activeHeroDef.attackStyle, isCrit, comboRef.current);
 
-    setSave((prev) => ({
-      ...prev,
-      totalClicks: prev.totalClicks + 1,
-      totalCrits: prev.totalCrits + (isCrit ? 1 : 0),
-    }));
-  }, []);
+      setSave((prev) => ({
+        ...prev,
+        totalClicks: prev.totalClicks + 1,
+        totalCrits: prev.totalCrits + (isCrit ? 1 : 0),
+      }));
+    },
+    [activeHeroDef.attackStyle]
+  );
 
   const handleEnemySlain = useCallback((goldEarned: number, isBoss: boolean, isRare: boolean) => {
     soundEngine.playEnemyDefeat(isBoss);
@@ -1259,15 +1262,15 @@ export default function App() {
         onBossTimerUpdate={setBossSecondsLeft}
       />
 
-      {/* START GAME SCREEN */}
+      {/* START GAME SCREEN (Sleek, Zero-Scroll Overlay over Live Animated Dungeon) */}
       {screen === 'title' && (
-        <div className="fixed inset-0 z-30 flex flex-col items-center justify-center p-4 sm:p-6 bg-gradient-to-b from-[#090b10]/75 via-[#0b0e16]/55 to-[#090b10]/90">
+        <div className="fixed inset-0 z-30 flex flex-col items-center justify-center p-3 sm:p-5 bg-gradient-to-b from-[#090b10]/55 via-[#0b0e16]/40 to-[#090b10]/78">
           {/* Top-right Audio & Language Controls */}
-          <div className="absolute top-3 right-3 sm:top-5 sm:right-5 flex items-center gap-2">
+          <div className="absolute top-3 right-3 sm:top-4 sm:right-4 flex items-center gap-2">
             <button
               onClick={toggleMute}
               aria-label={muted ? 'Unmute audio' : 'Mute audio'}
-              className="pixel-card min-h-[40px] px-3 py-2 rounded-lg flex items-center gap-1.5 text-xs font-bold text-slate-200 hover:brightness-115 cursor-pointer"
+              className="pixel-card min-h-[40px] px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-bold text-slate-200 hover:brightness-115 cursor-pointer"
             >
               {muted ? (
                 <VolumeX className="w-4 h-4 text-rose-400" />
@@ -1278,54 +1281,54 @@ export default function App() {
             </button>
             <button
               onClick={cycleLocale}
-              className="pixel-card min-h-[40px] px-3 py-2 rounded-lg flex items-center gap-1.5 text-xs font-bold text-amber-300 hover:brightness-115 cursor-pointer"
+              className="pixel-card min-h-[40px] px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-bold text-amber-300 hover:brightness-115 cursor-pointer"
             >
               <Globe className="w-4 h-4" />
               {locale === 'en' ? 'EN' : locale === 'zh-TW' ? '繁中' : '简中'}
             </button>
           </div>
 
-          <div className="pixel-panel rounded-2xl p-4 sm:p-6 max-w-2xl w-full max-h-[92vh] overflow-y-auto custom-scroll flex flex-col items-center text-center gap-3.5 sm:gap-4">
-            {/* Pixel Hero Party (reflects currently selected Race!) vs Raid Dragon Showcase */}
-            <div className="w-full rounded-xl bg-gradient-to-b from-[#171c2b] to-[#10131e] border-2 border-[#2d344a] px-3 py-2.5 sm:py-3.5 flex items-center justify-between gap-2 overflow-hidden">
-              <div className="flex items-end gap-1.5 sm:gap-2.5">
-                <PixelSpriteThumb kind="hero" id="warrior" raceId={save.activeRace} size={46} />
-                <PixelSpriteThumb kind="hero" id="paladin" raceId={save.activeRace} size={46} />
-                <PixelSpriteThumb kind="hero" id="mage" raceId={save.activeRace} size={46} />
+          <div className="pixel-panel bg-[#141722]/90 backdrop-blur-[2px] rounded-2xl p-3.5 sm:p-5 max-w-2xl w-full max-h-[94dvh] overflow-y-auto custom-scroll flex flex-col items-center text-center gap-2.5 sm:gap-3.5">
+            {/* Compact Hero Party vs Dragon Preview Strip */}
+            <div className="w-full rounded-xl bg-gradient-to-b from-[#171c2b] to-[#10131e] border border-[#2d344a] px-3 py-2 flex items-center justify-between gap-2 overflow-hidden">
+              <div className="flex items-end gap-1.5 sm:gap-2">
+                <PixelSpriteThumb kind="hero" id="warrior" raceId={save.activeRace} size={38} />
+                <PixelSpriteThumb kind="hero" id="paladin" raceId={save.activeRace} size={38} />
+                <PixelSpriteThumb kind="hero" id="mage" raceId={save.activeRace} size={38} />
                 <div className="hidden sm:block">
-                  <PixelSpriteThumb kind="hero" id="shaman" raceId={save.activeRace} size={44} />
+                  <PixelSpriteThumb kind="hero" id="shaman" raceId={save.activeRace} size={38} />
                 </div>
                 <div className="hidden sm:block">
-                  <PixelSpriteThumb kind="hero" id="druid" raceId={save.activeRace} size={44} />
+                  <PixelSpriteThumb kind="hero" id="druid" raceId={save.activeRace} size={38} />
                 </div>
               </div>
-              <div className="font-pixel text-sm sm:text-base font-bold text-amber-400/90 px-1 shrink-0">
+              <div className="font-display text-sm sm:text-base font-bold text-amber-400/90 px-1 shrink-0">
                 VS
               </div>
               <div className="flex items-end gap-1.5">
-                <PixelSpriteThumb kind="enemy" id="anomaly" size={44} />
-                <PixelSpriteThumb kind="enemy" id="onyxia" size={56} />
+                <PixelSpriteThumb kind="enemy" id="anomaly" size={38} />
+                <PixelSpriteThumb kind="enemy" id="onyxia" size={46} />
               </div>
             </div>
 
-            {/* Title Lockup */}
-            <div className="flex flex-col items-center gap-1">
-              <h1 className="font-pixel text-3xl sm:text-5xl font-bold text-amber-300 tracking-wide leading-none pixel-text-shadow">
+            {/* Display Title Lockup */}
+            <div className="flex flex-col items-center gap-0.5">
+              <h1 className="font-display text-3xl sm:text-5xl font-bold text-amber-300 tracking-wide leading-none pixel-text-shadow">
                 {t.gameTitle}
               </h1>
-              <div className="font-pixel text-base sm:text-xl font-bold text-sky-300 tracking-[0.18em] pixel-text-shadow">
+              <div className="font-display text-sm sm:text-lg font-bold text-sky-300 tracking-[0.2em] pixel-text-shadow">
                 {t.gameTitleEdition}
               </div>
-              <p className="text-xs sm:text-sm font-medium text-slate-300 mt-0.5">
+              <p className="text-[11px] sm:text-xs font-medium text-slate-300 mt-0.5">
                 {t.subtitle}
               </p>
             </div>
 
             {/* Locked Progress Card (returning run) OR Starting Race Picker (new run) */}
             {hasSavedProgress ? (
-              <div className="w-full pixel-card rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-left">
+              <div className="w-full pixel-card rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-left">
                 <div className="flex items-center gap-3">
-                  <PixelSpriteThumb kind="hero" id={save.activeHero} raceId={save.activeRace} size={40} />
+                  <PixelSpriteThumb kind="hero" id={save.activeHero} raceId={save.activeRace} size={38} />
                   <div>
                     <div className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
                       <Lock className="w-3 h-3 text-amber-400" />
@@ -1345,13 +1348,13 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              <div className="w-full flex flex-col gap-2 text-left">
-                <div className="flex items-center justify-between px-1">
-                  <span className="font-pixel text-xs sm:text-sm font-bold text-amber-300 uppercase tracking-wider">
+              <div className="w-full flex flex-col gap-1.5 text-left">
+                <div className="flex items-center justify-between gap-2 px-1">
+                  <span className="text-xs font-bold text-amber-300 tracking-wide">
                     {t.chooseRaceLabel}
                   </span>
                   <span
-                    className={`text-[11px] font-bold ${
+                    className={`text-[11px] font-bold truncate ${
                       activeRaceDef.faction === 'Alliance' ? 'text-sky-400' : 'text-rose-400'
                     }`}
                   >
@@ -1375,7 +1378,7 @@ export default function App() {
                             : 'bg-[#171b28] border-[#2d354b] hover:border-slate-500'
                         }`}
                       >
-                        <PixelSpriteThumb kind="hero" id="warrior" raceId={r.id} size={28} />
+                        <PixelSpriteThumb kind="hero" id="warrior" raceId={r.id} size={26} />
                         <div className="min-w-0">
                           <div className="font-pixel text-[11px] font-bold text-white leading-tight truncate">
                             {r.name[locale]}
@@ -1396,24 +1399,24 @@ export default function App() {
             )}
 
             {/* Primary & Secondary Actions */}
-            <div className="w-full flex flex-col sm:flex-row items-stretch gap-2.5">
+            <div className="w-full flex flex-col sm:flex-row items-stretch gap-2">
               <button
                 onClick={enterGame}
-                className="pixel-btn-gold flex-1 min-h-[48px] py-3 px-6 rounded-xl font-pixel text-xl font-bold text-slate-950 tracking-wide flex items-center justify-center gap-2 cursor-pointer"
+                className="pixel-btn-gold flex-1 min-h-[46px] py-2.5 px-6 rounded-xl font-pixel text-lg font-extrabold text-slate-950 tracking-wide flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Play className="w-5 h-5 fill-slate-950" />
                 <span>{hasSavedProgress ? t.continueCta : t.playCta}</span>
               </button>
               <button
                 onClick={openHelp}
-                className="pixel-btn-slate min-h-[48px] py-3 px-5 rounded-xl font-pixel text-base font-bold text-slate-100 flex items-center justify-center gap-2 hover:brightness-110 cursor-pointer shrink-0"
+                className="pixel-btn-slate min-h-[46px] py-2.5 px-5 rounded-xl font-pixel text-sm font-bold text-slate-100 flex items-center justify-center gap-2 hover:brightness-110 cursor-pointer shrink-0"
               >
                 <PixelIcon name="help" size={18} />
                 <span>{t.howToPlayCta}</span>
               </button>
             </div>
 
-            <p className="text-[11px] sm:text-xs text-slate-400 leading-relaxed">
+            <p className="text-[11px] text-slate-400 leading-snug">
               {t.controlsHint}
             </p>
           </div>
@@ -1792,6 +1795,7 @@ export default function App() {
                         buyAmount
                       );
                       const canAfford = save.gold >= totalCost;
+                      const needsFirstUpgrade = atkLv <= 1 && canAfford;
                       const nextMilestone = Math.floor(atkLv / 25 + 1) * 25;
                       return (
                         <div className="pixel-card rounded-xl px-3 py-2.5 flex items-center justify-between gap-2.5 border-sky-400/40">
@@ -1803,12 +1807,12 @@ export default function App() {
                               <SkillPixelIcon visual={atk.style} size={28} />
                             </div>
                             <div className="min-w-0">
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 min-w-0">
                                 <span className="font-pixel text-base font-bold text-white leading-tight truncate">
                                   {atk.name[locale]}
                                 </span>
-                                <span className="px-1.5 py-0.5 rounded bg-sky-500/20 border border-sky-400/40 text-[9px] font-bold text-sky-300 shrink-0">
-                                  {t.primaryAtkTag}
+                                <span className="text-[10px] font-semibold text-sky-400 shrink-0">
+                                  · {t.primaryAtkTag}
                                 </span>
                               </div>
                               <div className="text-xs font-bold text-sky-300 truncate">
@@ -1825,7 +1829,9 @@ export default function App() {
                             disabled={!canAfford}
                             className={`shrink-0 min-w-[104px] px-3 py-2 rounded-xl flex items-center justify-center gap-1.5 font-pixel text-base font-bold cursor-pointer transition ${
                               canAfford
-                                ? 'pixel-btn-green text-white pixel-text-shadow'
+                                ? `pixel-btn-green text-white pixel-text-shadow ${
+                                    needsFirstUpgrade ? 'ring-2 ring-amber-400 animate-pulse' : ''
+                                  }`
                                 : 'pixel-btn-slate text-slate-300 opacity-75 cursor-not-allowed'
                             }`}
                           >
@@ -1868,15 +1874,15 @@ export default function App() {
                               <SkillPixelIcon visual={sk.effect} size={28} />
                             </div>
                             <div className="min-w-0">
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 min-w-0">
                                 <span
                                   className="font-pixel text-base font-bold leading-tight truncate"
                                   style={{ color: sk.color }}
                                 >
                                   {sk.name[locale]}
                                 </span>
-                                <span className="px-1.5 py-0.5 rounded bg-violet-500/20 border border-violet-400/40 text-[9px] font-bold text-violet-200 shrink-0">
-                                  {t.skillUpgradeTag} #{idx + 1}
+                                <span className="text-[10px] font-semibold text-violet-300 shrink-0">
+                                  · {t.skillUpgradeTag} #{idx + 1}
                                 </span>
                               </div>
                               <div className="text-xs font-bold text-emerald-300 truncate">

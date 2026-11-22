@@ -18,6 +18,12 @@ body,
 }
 
 .font-pixel {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-display {
   font-family: 'Pixelify Sans', 'Plus Jakarta Sans', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
@@ -28,7 +34,7 @@ body,
 }
 
 .pixel-text-shadow {
-  text-shadow: 0 2px 0 #090b10, 0 0 3px rgba(9, 11, 16, 0.85);
+  text-shadow: 0 2px 2px rgba(9, 11, 16, 0.95), 0 0 6px rgba(9, 11, 16, 0.7);
 }
 
 .pixel-panel {

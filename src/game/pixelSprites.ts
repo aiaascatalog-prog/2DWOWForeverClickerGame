@@ -3,6 +3,113 @@
 export type SpritePalette = Record<string, string>;
 
 const spriteCache = new Map<string, HTMLCanvasElement>();
+const hitFlashCache = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>();
+const OUTLINE_HEX = '#0b0e14';
+
+function adjustHexBrightness(hex: string, delta: number): string {
+  if (!hex.startsWith('#') || (hex.length !== 7 && hex.length !== 4)) return hex;
+  const full =
+    hex.length === 4
+      ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`
+      : hex;
+  const r = Math.max(0, Math.min(255, parseInt(full.slice(1, 3), 16) + delta));
+  const g = Math.max(0, Math.min(255, parseInt(full.slice(3, 5), 16) + delta));
+  const b = Math.max(0, Math.min(255, parseInt(full.slice(5, 7), 16) + delta));
+  return `rgb(${r},${g},${b})`;
+}
+
+function upscaleAndShadeMatrix(src: (string | null)[][]): HTMLCanvasElement {
+  const h = src.length;
+  const w = src[0]?.length ?? 1;
+  const outW = w * 2;
+  const outH = h * 2;
+  const out: (string | null)[][] = Array.from({ length: outH }, () =>
+    Array<string | null>(outW).fill(null)
+  );
+
+  const at = (x: number, y: number): string | null =>
+    x >= 0 && x < w && y >= 0 && y < h ? src[y][x] : null;
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = at(x, y);
+      const a = at(x, y - 1);
+      const b = at(x + 1, y);
+      const c = at(x - 1, y);
+      const d = at(x, y + 1);
+
+      let c1 = p;
+      let c2 = p;
+      let c3 = p;
+      let c4 = p;
+
+      // Preserve dark outlines while smoothing diagonal silhouettes via EPX
+      if (p !== OUTLINE_HEX) {
+        if (c === a && c !== d && a !== b) c1 = a;
+        if (a === b && a !== c && b !== d) c2 = b;
+        if (d === c && d !== b && c !== a) c3 = c;
+        if (b === d && b !== a && d !== c) c4 = d;
+      } else {
+        if (c === a && c !== null && c !== d && a !== b) c1 = a;
+        if (a === b && a !== null && a !== c && b !== d) c2 = b;
+        if (d === c && d !== null && d !== b && c !== a) c3 = c;
+        if (b === d && b !== null && b !== a && d !== c) c4 = d;
+      }
+
+      out[y * 2][x * 2] = c1;
+      out[y * 2][x * 2 + 1] = c2;
+      out[y * 2 + 1][x * 2] = c3;
+      out[y * 2 + 1][x * 2 + 1] = c4;
+    }
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = outW;
+  canvas.height = outH;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    for (let y = 0; y < outH; y++) {
+      for (let x = 0; x < outW; x++) {
+        const col = out[y][x];
+        if (!col) continue;
+        let finalColor = col;
+        if (col !== OUTLINE_HEX) {
+          const above = y > 0 ? out[y - 1][x] : null;
+          const below = y + 1 < outH ? out[y + 1][x] : null;
+          if (above === OUTLINE_HEX && below !== OUTLINE_HEX) {
+            finalColor = adjustHexBrightness(col, 22);
+          } else if (below === OUTLINE_HEX && above !== OUTLINE_HEX) {
+            finalColor = adjustHexBrightness(col, -24);
+          } else if ((x + y) % 7 === 0 && above === col && below === col) {
+            finalColor = adjustHexBrightness(col, 8);
+          }
+        }
+        ctx.fillStyle = finalColor;
+        ctx.fillRect(x, y, 1, 1);
+      }
+    }
+  }
+  return canvas;
+}
+
+export function getSpriteHitFlash(sprite: HTMLCanvasElement): HTMLCanvasElement {
+  const existing = hitFlashCache.get(sprite);
+  if (existing) return existing;
+
+  const flash = document.createElement('canvas');
+  flash.width = sprite.width;
+  flash.height = sprite.height;
+  const ctx = flash.getContext('2d');
+  if (ctx) {
+    ctx.drawImage(sprite, 0, 0);
+    ctx.globalCompositeOperation = 'source-atop';
+    ctx.fillStyle = 'rgba(255, 250, 235, 0.85)';
+    ctx.fillRect(0, 0, flash.width, flash.height);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  hitFlashCache.set(sprite, flash);
+  return flash;
+}
 
 function bakePixelSprite(
   key: string,
@@ -16,24 +123,21 @@ function bakePixelSprite(
 
   const h = grid.length;
   const w = Math.max(...grid.map((r) => r.length));
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    for (let y = 0; y < h; y++) {
-      const row = grid[y];
-      for (let x = 0; x < row.length; x++) {
-        const ch = row[x];
-        if (ch === '.' || ch === ' ') continue;
-        const color = palette[ch];
-        if (!color) continue;
-        ctx.fillStyle = color;
-        const drawX = flipX ? w - 1 - x : x;
-        ctx.fillRect(drawX, y, 1, 1);
-      }
+  const matrix: (string | null)[][] = Array.from({ length: h }, () =>
+    Array<string | null>(w).fill(null)
+  );
+  for (let y = 0; y < h; y++) {
+    const row = grid[y];
+    for (let x = 0; x < row.length; x++) {
+      const ch = row[x];
+      if (ch === '.' || ch === ' ') continue;
+      const color = palette[ch];
+      if (!color) continue;
+      const drawX = flipX ? w - 1 - x : x;
+      matrix[y][drawX] = color;
     }
   }
+  const canvas = upscaleAndShadeMatrix(matrix);
   spriteCache.set(cacheKey, canvas);
   return canvas;
 }
@@ -1170,9 +1274,16 @@ const RACE_VISUALS: Record<string, RaceVisualProfile> = {
   },
 };
 
-function px(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, w = 1, h = 1) {
-  ctx.fillStyle = color;
-  ctx.fillRect(x, y, w, h);
+function mpx(matrix: (string | null)[][], x: number, y: number, color: string, w = 1, h = 1) {
+  for (let dy = 0; dy < h; dy++) {
+    const ry = y + dy;
+    if (ry < 0 || ry >= matrix.length) continue;
+    for (let dx = 0; dx < w; dx++) {
+      const rx = x + dx;
+      if (rx < 0 || rx >= matrix[ry].length) continue;
+      matrix[ry][rx] = color;
+    }
+  }
 }
 
 export function getHeroSprite(heroId: string, raceId = 'human'): HTMLCanvasElement {
@@ -1195,107 +1306,96 @@ export function getHeroSprite(heroId: string, raceId = 'human'): HTMLCanvasEleme
     palette.H = race.hair;
   }
 
-  const canvas = document.createElement('canvas');
-  canvas.width = 20;
-  canvas.height = 18;
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    const gridH = def.grid.length;
-    const ox = 2;
-    const oy = 18 - gridH; // anchor feet cleanly at bottom (y=17)
-    const isMage = heroId === 'mage';
-    const faceY = isMage ? oy + 5 : oy + 4;
+  const matrix: (string | null)[][] = Array.from({ length: 18 }, () =>
+    Array<string | null>(20).fill(null)
+  );
+  const gridH = def.grid.length;
+  const ox = 2;
+  const oy = 18 - gridH; // anchor feet cleanly at bottom (y=17)
+  const isMage = heroId === 'mage';
+  const faceY = isMage ? oy + 5 : oy + 4;
 
-    // 1. Back-layer racial wings for Skyborne races
-    if (race.feature === 'skyborne_alliance' || race.feature === 'skyborne_horde') {
-      const wingMain = race.feature === 'skyborne_alliance' ? '#f8fafc' : '#581c87';
-      const wingTip = race.feature === 'skyborne_alliance' ? '#38bdf8' : '#fb923c';
-      const outline = '#0b0e14';
-      // Left wing
-      px(ctx, 0, oy + 4, outline, 2, 1);
-      px(ctx, 0, oy + 5, wingTip, 2, 2);
-      px(ctx, 1, oy + 6, wingMain, 2, 4);
-      px(ctx, 0, oy + 7, outline, 1, 3);
-      px(ctx, 1, oy + 10, outline, 2, 1);
-      // Right wing
-      px(ctx, 15, oy + 4, outline, 2, 1);
-      px(ctx, 15, oy + 5, wingTip, 2, 2);
-      px(ctx, 14, oy + 6, wingMain, 2, 4);
-      px(ctx, 16, oy + 7, outline, 1, 3);
-      px(ctx, 14, oy + 10, outline, 2, 1);
-    }
+  // 1. Back-layer racial wings for Skyborne races
+  if (race.feature === 'skyborne_alliance' || race.feature === 'skyborne_horde') {
+    const wingMain = race.feature === 'skyborne_alliance' ? '#f8fafc' : '#581c87';
+    const wingTip = race.feature === 'skyborne_alliance' ? '#38bdf8' : '#fb923c';
+    const outline = OUTLINE_HEX;
+    mpx(matrix, 0, oy + 4, outline, 2, 1);
+    mpx(matrix, 0, oy + 5, wingTip, 2, 2);
+    mpx(matrix, 1, oy + 6, wingMain, 2, 4);
+    mpx(matrix, 0, oy + 7, outline, 1, 3);
+    mpx(matrix, 1, oy + 10, outline, 2, 1);
 
-    // 2. Draw base class sprite with racial skin & eye palette
-    for (let y = 0; y < gridH; y++) {
-      const row = def.grid[y];
-      for (let x = 0; x < row.length; x++) {
-        const ch = row[x];
-        if (ch === '.' || ch === ' ') continue;
-        const color = palette[ch];
-        if (!color) continue;
-        px(ctx, ox + x, oy + y, color);
-      }
-    }
+    mpx(matrix, 15, oy + 4, outline, 2, 1);
+    mpx(matrix, 15, oy + 5, wingTip, 2, 2);
+    mpx(matrix, 14, oy + 6, wingMain, 2, 4);
+    mpx(matrix, 16, oy + 7, outline, 1, 3);
+    mpx(matrix, 14, oy + 10, outline, 2, 1);
+  }
 
-    // 3. Warlock visible racial face inside hood
-    if (heroId === 'warlock') {
-      px(ctx, ox + 5, oy + 4, race.skin, 2, 1);
-      px(ctx, ox + 5, oy + 4, race.eye, 1, 1);
-      px(ctx, ox + 7, oy + 4, race.eye, 1, 1);
-      px(ctx, ox + 5, oy + 5, race.skinDark, 3, 1);
-    }
-
-    // 4. Foreground racial silhouette features (ears, horns, beard, tusks, mohawk, goggles)
-    if (race.feature === 'dwarf') {
-      // Thick braided dwarf beard + ginger/amber brow
-      px(ctx, ox + 4, faceY + 1, race.hair, 5, 2);
-      px(ctx, ox + 5, faceY + 3, race.hair, 3, 1);
-      px(ctx, ox + 6, faceY + 2, '#fbbf24', 1, 1); // beard clasp
-    } else if (race.feature === 'night_elf') {
-      // Long pointed elven ears sticking out both sides
-      px(ctx, ox + 1, faceY - 1, '#0b0e14', 2, 1);
-      px(ctx, ox + 1, faceY, race.skin, 2, 1);
-      px(ctx, ox + 10, faceY - 1, '#0b0e14', 2, 1);
-      px(ctx, ox + 10, faceY, race.skin, 2, 1);
-      px(ctx, ox + 5, faceY - 2, race.hair, 3, 1);
-    } else if (race.feature === 'gnome') {
-      // Tinkerer brass goggles + bright hair tuft
-      px(ctx, ox + 4, faceY - 2, race.hair, 5, 1);
-      px(ctx, ox + 4, faceY - 1, '#38bdf8', 2, 1);
-      px(ctx, ox + 7, faceY - 1, '#38bdf8', 2, 1);
-      px(ctx, ox + 6, faceY - 1, '#facc15', 1, 1);
-    } else if (race.feature === 'orc') {
-      // Prominent lower tusks + Horde crimson shoulder stud
-      px(ctx, ox + 4, faceY + 1, '#f8fafc', 1, 1);
-      px(ctx, ox + 8, faceY + 1, '#f8fafc', 1, 1);
-      px(ctx, ox + 2, oy + 7, '#dc2626', 2, 2);
-    } else if (race.feature === 'undead') {
-      // Exposed bone jaw + glowing Forsaken eye flare + rib stripe
-      px(ctx, ox + 5, faceY + 1, '#cbd5e1', 3, 1);
-      px(ctx, ox + 4, faceY, race.eye, 1, 1);
-      px(ctx, ox + 8, faceY, race.eye, 1, 1);
-      px(ctx, ox + 6, oy + 8, '#cbd5e1', 2, 1);
-    } else if (race.feature === 'tauren') {
-      // Curved ivory bull horns + broad snout
-      px(ctx, ox + 1, oy + 1, '#f8fafc', 1, 2);
-      px(ctx, ox + 2, oy + 2, '#e2e8f0', 2, 1);
-      px(ctx, ox + 11, oy + 1, '#f8fafc', 1, 2);
-      px(ctx, ox + 9, oy + 2, '#e2e8f0', 2, 1);
-      px(ctx, ox + 5, faceY + 1, '#451a03', 3, 1);
-    } else if (race.feature === 'troll') {
-      // Tall crimson mohawk + pointed ears + tusks
-      px(ctx, ox + 5, Math.max(0, oy - 1), race.hair, 3, 2);
-      px(ctx, ox + 6, Math.max(0, oy - 2), '#fb923c', 1, 1);
-      px(ctx, ox + 1, faceY, race.skin, 2, 1);
-      px(ctx, ox + 10, faceY, race.skin, 2, 1);
-      px(ctx, ox + 4, faceY + 1, '#f8fafc', 1, 1);
-      px(ctx, ox + 8, faceY + 1, '#f8fafc', 1, 1);
-    } else if (race.feature === 'human') {
-      // Royal Stormwind crest glint
-      px(ctx, ox + 6, oy + 1, '#facc15', 2, 1);
+  // 2. Draw base class sprite with racial skin & eye palette
+  for (let y = 0; y < gridH; y++) {
+    const row = def.grid[y];
+    for (let x = 0; x < row.length; x++) {
+      const ch = row[x];
+      if (ch === '.' || ch === ' ') continue;
+      const color = palette[ch];
+      if (!color) continue;
+      mpx(matrix, ox + x, oy + y, color);
     }
   }
 
+  // 3. Warlock visible racial face inside hood
+  if (heroId === 'warlock') {
+    mpx(matrix, ox + 5, oy + 4, race.skin, 2, 1);
+    mpx(matrix, ox + 5, oy + 4, race.eye, 1, 1);
+    mpx(matrix, ox + 7, oy + 4, race.eye, 1, 1);
+    mpx(matrix, ox + 5, oy + 5, race.skinDark, 3, 1);
+  }
+
+  // 4. Foreground racial silhouette features (ears, horns, beard, tusks, mohawk, goggles)
+  if (race.feature === 'dwarf') {
+    mpx(matrix, ox + 4, faceY + 1, race.hair, 5, 2);
+    mpx(matrix, ox + 5, faceY + 3, race.hair, 3, 1);
+    mpx(matrix, ox + 6, faceY + 2, '#fbbf24', 1, 1);
+  } else if (race.feature === 'night_elf') {
+    mpx(matrix, ox + 1, faceY - 1, OUTLINE_HEX, 2, 1);
+    mpx(matrix, ox + 1, faceY, race.skin, 2, 1);
+    mpx(matrix, ox + 10, faceY - 1, OUTLINE_HEX, 2, 1);
+    mpx(matrix, ox + 10, faceY, race.skin, 2, 1);
+    mpx(matrix, ox + 5, faceY - 2, race.hair, 3, 1);
+  } else if (race.feature === 'gnome') {
+    mpx(matrix, ox + 4, faceY - 2, race.hair, 5, 1);
+    mpx(matrix, ox + 4, faceY - 1, '#38bdf8', 2, 1);
+    mpx(matrix, ox + 7, faceY - 1, '#38bdf8', 2, 1);
+    mpx(matrix, ox + 6, faceY - 1, '#facc15', 1, 1);
+  } else if (race.feature === 'orc') {
+    mpx(matrix, ox + 4, faceY + 1, '#f8fafc', 1, 1);
+    mpx(matrix, ox + 8, faceY + 1, '#f8fafc', 1, 1);
+    mpx(matrix, ox + 2, oy + 7, '#dc2626', 2, 2);
+  } else if (race.feature === 'undead') {
+    mpx(matrix, ox + 5, faceY + 1, '#cbd5e1', 3, 1);
+    mpx(matrix, ox + 4, faceY, race.eye, 1, 1);
+    mpx(matrix, ox + 8, faceY, race.eye, 1, 1);
+    mpx(matrix, ox + 6, oy + 8, '#cbd5e1', 2, 1);
+  } else if (race.feature === 'tauren') {
+    mpx(matrix, ox + 1, oy + 1, '#f8fafc', 1, 2);
+    mpx(matrix, ox + 2, oy + 2, '#e2e8f0', 2, 1);
+    mpx(matrix, ox + 11, oy + 1, '#f8fafc', 1, 2);
+    mpx(matrix, ox + 9, oy + 2, '#e2e8f0', 2, 1);
+    mpx(matrix, ox + 5, faceY + 1, '#451a03', 3, 1);
+  } else if (race.feature === 'troll') {
+    mpx(matrix, ox + 5, Math.max(0, oy - 1), race.hair, 3, 2);
+    mpx(matrix, ox + 6, Math.max(0, oy - 2), '#fb923c', 1, 1);
+    mpx(matrix, ox + 1, faceY, race.skin, 2, 1);
+    mpx(matrix, ox + 10, faceY, race.skin, 2, 1);
+    mpx(matrix, ox + 4, faceY + 1, '#f8fafc', 1, 1);
+    mpx(matrix, ox + 8, faceY + 1, '#f8fafc', 1, 1);
+  } else if (race.feature === 'human') {
+    mpx(matrix, ox + 6, oy + 1, '#facc15', 2, 1);
+  }
+
+  const canvas = upscaleAndShadeMatrix(matrix);
   spriteCache.set(cacheKey, canvas);
   return canvas;
 }

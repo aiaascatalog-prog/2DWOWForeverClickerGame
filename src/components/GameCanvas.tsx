@@ -16,6 +16,7 @@ import {
   getEnemySprite,
   getHandPointerSprite,
   getHeroSprite,
+  getSpriteHitFlash,
 } from '../game/pixelSprites';
 import { ClassAttackStyle, ClassAutoSkillDef, EnemyTier, HeroId, RaceId } from '../game/types';
 
@@ -98,6 +99,7 @@ interface CoinDrop {
   vy: number;
   life: number;
   maxLife: number;
+  magnetized: boolean;
 }
 
 interface LightningBolt {
@@ -288,6 +290,28 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
       paladinShieldCharges: 0,
     });
 
+    const bonusChestRef = useRef({
+      active: false,
+      x: 0,
+      y: 0,
+      life: 0,
+      maxLife: 9,
+      nextSpawnTimer: 16,
+      bobPhase: 0,
+    });
+
+    const bgCacheRef = useRef<{ key: string; canvas: HTMLCanvasElement } | null>(null);
+
+    const motesRef = useRef(
+      Array.from({ length: 20 }, (_, idx) => ({
+        nx: ((idx * 37) % 97) / 100,
+        ny: ((idx * 53) % 89) / 100,
+        speedY: 0.015 + (idx % 4) * 0.008,
+        drift: 0.5 + (idx % 5) * 0.35,
+        size: idx % 3 === 0 ? 2.5 : 1.5,
+      }))
+    );
+
     const particlesRef = useRef<Particle[]>(
       Array.from({ length: PARTICLE_POOL }, () => ({
         active: false,
@@ -354,7 +378,8 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
         vx: 0,
         vy: 0,
         life: 0,
-        maxLife: 0.85,
+        maxLife: 1.05,
+        magnetized: false,
       }))
     );
 
@@ -450,10 +475,11 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
           pool[i].active = true;
           pool[i].x = x;
           pool[i].y = y - 20;
-          pool[i].vx = (Math.random() - 0.5) * 140;
-          pool[i].vy = -160 - Math.random() * 90;
+          pool[i].vx = (Math.random() - 0.5) * 150;
+          pool[i].vy = -170 - Math.random() * 90;
           pool[i].life = 0;
-          pool[i].maxLife = 0.75 + Math.random() * 0.25;
+          pool[i].maxLife = 1.02 + Math.random() * 0.18;
+          pool[i].magnetized = false;
           spawned++;
         }
       }
@@ -872,6 +898,28 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
 
       if (px > arenaW || py > arenaH) return;
 
+      // Check interactive Golden Treasure Chest first
+      const chest = bonusChestRef.current;
+      if (chest.active) {
+        const cdx = px - chest.x;
+        const cdy = py - (chest.y - 14);
+        if (cdx * cdx + cdy * cdy <= 38 * 38) {
+          chest.active = false;
+          chest.nextSpawnTimer = 20 + Math.random() * 8;
+          const p = propsRef.current;
+          const bonus = Math.max(
+            25,
+            Math.floor(getMonsterGold(p.floor, false, true) * p.goldMultiplier * 2.2)
+          );
+          soundEngine.playGoldenCatch();
+          spawnParticles(chest.x, chest.y - 16, 26, '#facc15', 300);
+          spawnCoins(chest.x, chest.y - 14, 9);
+          spawnFloatingText(chest.x, chest.y - 46, `+${formatNumber(bonus)}g TREASURE!`, '#fde047', 1.2);
+          callbacksRef.current.onClassSkillBonusGold(bonus);
+          return;
+        }
+      }
+
       const s = simRef.current;
       let hitSlot: number | undefined;
       for (const enemy of s.enemies) {
@@ -910,69 +958,333 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
       const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(resize) : null;
       ro?.observe(canvas);
 
-      const drawPixelTorch = (x: number, y: number, timeSec: number, color: string) => {
-        ctx.fillStyle = '#475569';
-        ctx.fillRect(x - 6, y + 6, 12, 8);
-        ctx.fillStyle = '#78350f';
-        ctx.fillRect(x - 4, y - 4, 8, 12);
+      const bakeDungeonBackdrop = (
+        arenaW: number,
+        arenaH: number,
+        groundY: number,
+        zone: ReturnType<typeof getZoneForFloor>['zone']
+      ): HTMLCanvasElement => {
+        const cacheKey = `${zone.index}_${Math.round(arenaW)}_${Math.round(arenaH)}`;
+        if (bgCacheRef.current && bgCacheRef.current.key === cacheKey) {
+          return bgCacheRef.current.canvas;
+        }
 
-        const flicker = Math.sin(timeSec * 13 + x) * 3;
-        const grad = ctx.createRadialGradient(x, y - 10, 4, x, y - 10, 56 + flicker);
-        grad.addColorStop(0, `${color}55`);
-        grad.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = grad;
+        const off = document.createElement('canvas');
+        off.width = Math.max(1, Math.round(arenaW));
+        off.height = Math.max(1, Math.round(arenaH));
+        const b = off.getContext('2d');
+        if (!b) return off;
+
+        // 1. Deep atmospheric wall gradient
+        const wallGrad = b.createLinearGradient(0, 0, 0, groundY);
+        wallGrad.addColorStop(0, '#090b10');
+        wallGrad.addColorStop(0.28, zone.wallColor);
+        wallGrad.addColorStop(1, zone.wallColor);
+        b.fillStyle = wallGrad;
+        b.fillRect(0, 0, arenaW, groundY);
+
+        // 2. Weathered staggered masonry blocks with bevel highlights & cracks
+        const brickW = 48;
+        const brickH = 24;
+        for (let row = 0; row * brickH < groundY; row++) {
+          const offset = (row % 2) * (brickW / 2);
+          for (let col = -1; col * brickW < arenaW + brickW; col++) {
+            const bx = Math.round(col * brickW + offset);
+            const by = Math.round(row * brickH);
+            const seed = Math.abs(Math.sin(row * 19.7 + col * 43.3));
+
+            if (seed > 0.62) {
+              b.fillStyle = 'rgba(255, 255, 255, 0.045)';
+              b.fillRect(bx + 2, by + 2, brickW - 4, brickH - 4);
+            } else if (seed < 0.25) {
+              b.fillStyle = 'rgba(0, 0, 0, 0.18)';
+              b.fillRect(bx + 2, by + 2, brickW - 4, brickH - 4);
+            }
+
+            // Top bevel highlight + dark mortar joint
+            b.fillStyle = 'rgba(255, 255, 255, 0.045)';
+            b.fillRect(bx + 1, by + 1, brickW - 3, 2);
+            b.fillStyle = zone.wallTrim;
+            b.fillRect(bx, by + brickH - 2, brickW, 2);
+            b.fillRect(bx, by, 2, brickH);
+
+            // Subtle stone weathering crack
+            if (seed > 0.87) {
+              b.fillStyle = 'rgba(0, 0, 0, 0.35)';
+              b.fillRect(bx + 14, by + 6, 2, 7);
+              b.fillRect(bx + 16, by + 11, 5, 2);
+            }
+          }
+        }
+
+        // 3. Recessed Dungeon Prison Alcove on Right Wall
+        if (arenaW >= 420) {
+          const gx = Math.round(arenaW * 0.84);
+          const gy = Math.round(groundY * 0.26);
+          const gw = 54;
+          const gh = Math.round(groundY * 0.44);
+          b.fillStyle = '#07090e';
+          b.fillRect(gx, gy, gw, gh);
+          b.fillStyle = zone.wallTrim;
+          b.fillRect(gx - 4, gy - 4, gw + 8, 5);
+          b.fillRect(gx - 4, gy, 4, gh);
+          b.fillRect(gx + gw, gy, 4, gh);
+          b.fillRect(gx - 4, gy + gh, gw + 8, 5);
+          // Iron bars
+          for (let ix = gx + 9; ix < gx + gw - 4; ix += 11) {
+            b.fillStyle = '#334155';
+            b.fillRect(ix, gy, 3, gh);
+            b.fillStyle = '#64748b';
+            b.fillRect(ix, gy, 1, gh);
+          }
+          b.fillStyle = '#1e293b';
+          b.fillRect(gx, gy + Math.round(gh * 0.48), gw, 4);
+        }
+
+        // 4. Curved Gothic Keystone Archway (misty corridor depth + portcullis)
+        const archX = Math.round(arenaW * 0.52);
+        const archW = Math.min(184, Math.round(arenaW * 0.29));
+        const archH = Math.round(groundY * 0.66);
+        const archTopY = groundY - archH;
+        const archRadius = Math.round(archW / 2);
+        const springY = archTopY + archRadius;
+
+        // Outer carved stone pillar & curved arch surround
+        b.fillStyle = '#0b0d14';
+        b.beginPath();
+        b.arc(archX, springY, archRadius + 14, Math.PI, 0);
+        b.lineTo(archX + archRadius + 14, groundY);
+        b.lineTo(archX - archRadius - 14, groundY);
+        b.closePath();
+        b.fill();
+
+        b.fillStyle = zone.wallTrim;
+        b.beginPath();
+        b.arc(archX, springY, archRadius + 11, Math.PI, 0);
+        b.lineTo(archX + archRadius + 11, groundY);
+        b.lineTo(archX - archRadius - 11, groundY);
+        b.closePath();
+        b.fill();
+
+        // Dark recessed doorway gradient
+        const doorGrad = b.createLinearGradient(0, archTopY, 0, groundY);
+        doorGrad.addColorStop(0, '#040509');
+        doorGrad.addColorStop(0.65, '#090c14');
+        doorGrad.addColorStop(1, '#121826');
+        b.fillStyle = doorGrad;
+        b.beginPath();
+        b.arc(archX, springY, archRadius - 2, Math.PI, 0);
+        b.lineTo(archX + archRadius - 2, groundY);
+        b.lineTo(archX - archRadius + 2, groundY);
+        b.closePath();
+        b.fill();
+
+        // Subtle misty steps inside doorway
+        b.fillStyle = 'rgba(148, 163, 184, 0.08)';
+        b.fillRect(archX - archRadius + 14, groundY - 22, archW - 28, 6);
+        b.fillRect(archX - archRadius + 8, groundY - 12, archW - 16, 12);
+
+        // Raised iron portcullis teeth at arch top
+        b.save();
+        b.beginPath();
+        b.arc(archX, springY, archRadius - 2, Math.PI, 0);
+        b.lineTo(archX + archRadius - 2, archTopY + Math.round(archH * 0.34));
+        b.lineTo(archX - archRadius + 2, archTopY + Math.round(archH * 0.34));
+        b.closePath();
+        b.clip();
+        for (let px = archX - archRadius + 12; px < archX + archRadius - 8; px += 16) {
+          b.fillStyle = '#1e293b';
+          b.fillRect(px, archTopY, 4, Math.round(archH * 0.34));
+          b.fillStyle = '#475569';
+          b.fillRect(px, archTopY, 1, Math.round(archH * 0.34));
+        }
+        b.fillStyle = '#1e293b';
+        b.fillRect(archX - archRadius, archTopY + Math.round(archH * 0.25), archW, 4);
+        b.restore();
+
+        // Stone pillar plinths & keystone accent
+        b.fillStyle = '#475569';
+        b.fillRect(archX - archRadius - 14, groundY - 14, 18, 14);
+        b.fillRect(archX + archRadius - 4, groundY - 14, 18, 14);
+        b.fillStyle = '#64748b';
+        b.fillRect(archX - 8, archTopY - 12, 16, 15);
+
+        // 5. Perspective Stone Flagstone Floor
+        const floorGrad = b.createLinearGradient(0, groundY, 0, arenaH);
+        floorGrad.addColorStop(0, zone.floorAccent);
+        floorGrad.addColorStop(0.22, zone.floorColor);
+        floorGrad.addColorStop(1, '#090b10');
+        b.fillStyle = floorGrad;
+        b.fillRect(0, groundY, arenaW, arenaH - groundY);
+
+        // Wall-floor ambient occlusion & curb stone edge
+        const aoGrad = b.createLinearGradient(0, groundY, 0, groundY + 18);
+        aoGrad.addColorStop(0, 'rgba(0,0,0,0.48)');
+        aoGrad.addColorStop(1, 'rgba(0,0,0,0)');
+        b.fillStyle = aoGrad;
+        b.fillRect(0, groundY, arenaW, 18);
+
+        b.fillStyle = 'rgba(255,255,255,0.09)';
+        b.fillRect(0, groundY, arenaW, 2);
+
+        b.strokeStyle = 'rgba(0,0,0,0.34)';
+        b.lineWidth = 2;
+        for (let rowY = groundY + 26; rowY < arenaH; rowY += 32) {
+          b.beginPath();
+          b.moveTo(0, rowY);
+          b.lineTo(arenaW, rowY);
+          b.stroke();
+        }
+        const centerFloorX = arenaW * 0.5;
+        for (let fx = -40; fx <= arenaW + 40; fx += 64) {
+          const skew = (fx - centerFloorX) * 0.22;
+          b.beginPath();
+          b.moveTo(fx, groundY + 2);
+          b.lineTo(fx + skew, arenaH);
+          b.stroke();
+        }
+
+        // 6. Hanging Crest Banner with Iron Chains & Shaded Folds
+        const bx = Math.round(arenaW * 0.23);
+        const by = Math.round(groundY * 0.16);
+        // Iron rod & brackets
+        b.fillStyle = '#0b0e14';
+        b.fillRect(bx - 36, by - 4, 72, 8);
+        b.fillStyle = '#64748b';
+        b.fillRect(bx - 34, by - 2, 68, 4);
+        b.fillStyle = '#94a3b8';
+        b.fillRect(bx - 32, by - 2, 64, 1);
+
+        // Swallowtail banner cloth + shadow fold
+        b.fillStyle = '#090b10';
+        b.beginPath();
+        b.moveTo(bx - 29, by + 4);
+        b.lineTo(bx + 29, by + 4);
+        b.lineTo(bx + 29, by + 84);
+        b.lineTo(bx, by + 70);
+        b.lineTo(bx - 29, by + 84);
+        b.closePath();
+        b.fill();
+
+        b.fillStyle = zone.bannerColor;
+        b.beginPath();
+        b.moveTo(bx - 26, by + 5);
+        b.lineTo(bx + 26, by + 5);
+        b.lineTo(bx + 26, by + 80);
+        b.lineTo(bx, by + 67);
+        b.lineTo(bx - 26, by + 80);
+        b.closePath();
+        b.fill();
+
+        b.fillStyle = 'rgba(0, 0, 0, 0.22)';
+        b.fillRect(bx, by + 5, 26, 66);
+
+        // Gold border trim & crest skull
+        b.fillStyle = '#facc15';
+        b.fillRect(bx - 26, by + 5, 52, 3);
+        b.fillRect(bx - 26, by + 5, 3, 73);
+        b.fillRect(bx + 23, by + 5, 3, 73);
+
+        b.fillStyle = '#f8fafc';
+        b.fillRect(bx - 9, by + 23, 18, 14);
+        b.fillRect(bx - 6, by + 37, 12, 6);
+        b.fillStyle = '#090b10';
+        b.fillRect(bx - 6, by + 28, 4, 4);
+        b.fillRect(bx + 2, by + 28, 4, 4);
+        b.fillRect(bx - 2, by + 39, 1, 3);
+        b.fillRect(bx + 1, by + 39, 1, 3);
+
+        // 7. Grounded Left Crate & Iron-Hooped Barrel
+        const cx = Math.round(arenaW * 0.04);
+        const cy = Math.round(groundY - 42);
+        b.fillStyle = 'rgba(0,0,0,0.48)';
+        b.beginPath();
+        b.ellipse(cx + 22, groundY + 3, 26, 6, 0, 0, Math.PI * 2);
+        b.fill();
+
+        b.fillStyle = '#0b0e14';
+        b.fillRect(cx - 2, cy - 2, 46, 46);
+        b.fillStyle = '#78350f';
+        b.fillRect(cx, cy, 42, 42);
+        b.fillStyle = '#92400e';
+        b.fillRect(cx + 4, cy + 4, 34, 34);
+        b.fillStyle = '#b45309';
+        b.fillRect(cx + 4, cy + 4, 34, 4);
+        b.fillStyle = '#451a03';
+        b.fillRect(cx + 4, cy + 19, 34, 4);
+        b.fillRect(cx + 19, cy + 4, 4, 34);
+        // Diagonal crate brace
+        b.strokeStyle = '#5c280a';
+        b.lineWidth = 4;
+        b.beginPath();
+        b.moveTo(cx + 6, cy + 36);
+        b.lineTo(cx + 36, cy + 6);
+        b.stroke();
+
+        const barX = cx + 48;
+        const barY = Math.round(groundY - 36);
+        b.fillStyle = 'rgba(0,0,0,0.48)';
+        b.beginPath();
+        b.ellipse(barX + 15, groundY + 3, 18, 5, 0, 0, Math.PI * 2);
+        b.fill();
+
+        b.fillStyle = '#0b0e14';
+        b.fillRect(barX - 2, barY - 2, 34, 38);
+        b.fillStyle = '#854d0e';
+        b.fillRect(barX, barY, 30, 34);
+        b.fillStyle = '#a16207';
+        b.fillRect(barX + 6, barY + 2, 10, 30);
+        b.fillStyle = '#475569';
+        b.fillRect(barX, barY + 6, 30, 4);
+        b.fillRect(barX, barY + 23, 30, 4);
+
+        // 8. Soft Framing Vignette
+        const vig = b.createRadialGradient(
+          arenaW * 0.5,
+          arenaH * 0.55,
+          arenaW * 0.28,
+          arenaW * 0.5,
+          arenaH * 0.55,
+          Math.max(arenaW, arenaH) * 0.78
+        );
+        vig.addColorStop(0, 'rgba(0,0,0,0)');
+        vig.addColorStop(1, 'rgba(5, 7, 12, 0.45)');
+        b.fillStyle = vig;
+        b.fillRect(0, 0, arenaW, arenaH);
+
+        bgCacheRef.current = { key: cacheKey, canvas: off };
+        return off;
+      };
+
+      const drawPixelTorch = (x: number, y: number, timeSec: number, color: string) => {
+        // Sconce iron bracket
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(x - 6, y + 5, 12, 7);
+        ctx.fillStyle = '#475569';
+        ctx.fillRect(x - 5, y + 5, 10, 2);
+        ctx.fillStyle = '#78350f';
+        ctx.fillRect(x - 3, y - 4, 6, 11);
+
+        const flicker = Math.sin(timeSec * 12 + x * 0.1) * 3.5;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const halo = ctx.createRadialGradient(x, y - 10, 3, x, y - 10, 74 + flicker);
+        halo.addColorStop(0, `${color}50`);
+        halo.addColorStop(0.45, `${color}1e`);
+        halo.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = halo;
         ctx.beginPath();
-        ctx.arc(x, y - 10, 58 + flicker, 0, Math.PI * 2);
+        ctx.arc(x, y - 10, 76 + flicker, 0, Math.PI * 2);
         ctx.fill();
+        ctx.restore();
 
         const fShift = Math.round(Math.sin(timeSec * 16 + x) * 2);
         ctx.fillStyle = color;
-        ctx.fillRect(x - 6, y - 16, 12, 12);
-        ctx.fillRect(x - 4 + fShift, y - 22, 8, 8);
+        ctx.fillRect(x - 5, y - 15, 10, 11);
+        ctx.fillRect(x - 3 + fShift, y - 21, 6, 7);
         ctx.fillStyle = '#fef08a';
-        ctx.fillRect(x - 3, y - 14, 6, 8);
-        ctx.fillRect(x - 2 + fShift, y - 18, 4, 4);
-      };
-
-      const drawDungeonProps = (arenaW: number, groundY: number, zoneBanner: string) => {
-        const bx = Math.round(arenaW * 0.24);
-        const by = Math.round(groundY * 0.2);
-        ctx.fillStyle = '#0b0e14';
-        ctx.fillRect(bx - 34, by - 4, 68, 8);
-        ctx.fillStyle = zoneBanner;
-        ctx.fillRect(bx - 28, by + 4, 56, 84);
-        ctx.fillStyle = '#facc15';
-        ctx.fillRect(bx - 28, by + 4, 56, 4);
-        ctx.fillRect(bx - 28, by + 4, 4, 80);
-        ctx.fillRect(bx + 24, by + 4, 4, 80);
-        ctx.fillStyle = '#f8fafc';
-        ctx.fillRect(bx - 10, by + 26, 20, 16);
-        ctx.fillRect(bx - 6, by + 42, 12, 8);
-        ctx.fillStyle = zoneBanner;
-        ctx.fillRect(bx - 6, by + 32, 4, 4);
-        ctx.fillRect(bx + 2, by + 32, 4, 4);
-
-        const cx = Math.round(arenaW * 0.04);
-        const cy = Math.round(groundY - 46);
-        ctx.fillStyle = '#0b0e14';
-        ctx.fillRect(cx - 2, cy - 2, 48, 48);
-        ctx.fillStyle = '#78350f';
-        ctx.fillRect(cx, cy, 44, 44);
-        ctx.fillStyle = '#92400e';
-        ctx.fillRect(cx + 4, cy + 4, 36, 36);
-        ctx.fillStyle = '#5c280a';
-        ctx.fillRect(cx + 4, cy + 19, 36, 5);
-        ctx.fillRect(cx + 19, cy + 4, 5, 36);
-
-        const barX = cx + 50;
-        const barY = Math.round(groundY - 38);
-        ctx.fillStyle = '#0b0e14';
-        ctx.fillRect(barX - 2, barY - 2, 34, 40);
-        ctx.fillStyle = '#854d0e';
-        ctx.fillRect(barX, barY, 30, 36);
-        ctx.fillStyle = '#475569';
-        ctx.fillRect(barX, barY + 6, 30, 4);
-        ctx.fillRect(barX, barY + 24, 30, 4);
+        ctx.fillRect(x - 2, y - 13, 4, 7);
+        ctx.fillRect(x - 1 + fShift, y - 17, 3, 4);
       };
 
       const loop = (now: number) => {
@@ -1133,7 +1445,31 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
           if (ef.life >= ef.maxLife) ef.active = false;
         }
 
-        // Update coins
+        // Bonus Golden Chest periodic spawn & timer
+        const chest = bonusChestRef.current;
+        if (p.isPlaying) {
+          if (chest.active) {
+            chest.life -= dt;
+            chest.bobPhase += dt * 4.5;
+            if (chest.life <= 0) {
+              chest.active = false;
+              chest.nextSpawnTimer = 20 + Math.random() * 8;
+            }
+          } else {
+            chest.nextSpawnTimer -= dt;
+            if (chest.nextSpawnTimer <= 0) {
+              chest.active = true;
+              chest.x = Math.round(arenaW * (0.3 + Math.random() * 0.44));
+              chest.y = Math.round(groundY + 26);
+              chest.life = chest.maxLife;
+              chest.bobPhase = 0;
+            }
+          }
+        }
+
+        // Update coins (floor bounce -> magnet arc to top-center Gold counter)
+        const goldTargetX = arenaW * 0.5;
+        const goldTargetY = 26;
         for (const c of coinsRef.current) {
           if (!c.active) continue;
           c.life += dt;
@@ -1141,13 +1477,29 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
             c.active = false;
             continue;
           }
-          c.x += c.vx * dt;
-          c.y += c.vy * dt;
-          c.vy += 580 * dt;
-          if (c.y > groundY) {
-            c.y = groundY;
-            c.vy *= -0.45;
-            c.vx *= 0.7;
+          if (!c.magnetized && c.life > 0.34) {
+            c.magnetized = true;
+          }
+          if (c.magnetized) {
+            const dx = goldTargetX - c.x;
+            const dy = goldTargetY - c.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist < 16) {
+              c.active = false;
+              continue;
+            }
+            const pull = 10 + (c.life - 0.34) * 14;
+            c.x += (dx / Math.max(1, dist)) * pull * 55 * dt;
+            c.y += (dy / Math.max(1, dist)) * pull * 55 * dt;
+          } else {
+            c.x += c.vx * dt;
+            c.y += c.vy * dt;
+            c.vy += 580 * dt;
+            if (c.y > groundY) {
+              c.y = groundY;
+              c.vy *= -0.45;
+              c.vx *= 0.7;
+            }
           }
         }
 
@@ -1200,64 +1552,73 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
         ctx.rect(0, 0, arenaW, arenaH);
         ctx.clip();
 
-        // Dungeon Wall
-        ctx.fillStyle = zone.wallColor;
-        ctx.fillRect(0, 0, arenaW, groundY);
+        // Cached Procedural Dungeon Backdrop
+        const backdrop = bakeDungeonBackdrop(arenaW, arenaH, groundY, zone);
+        ctx.drawImage(backdrop, 0, 0, arenaW, arenaH);
 
-        // Pixel Brick Texture
-        ctx.fillStyle = zone.wallTrim;
-        const brickW = 44;
-        const brickH = 22;
-        for (let row = 0; row * brickH < groundY; row++) {
-          const offset = (row % 2) * (brickW / 2);
-          for (let col = -1; col * brickW < arenaW; col++) {
-            const bx = col * brickW + offset;
-            const by = row * brickH;
-            ctx.fillRect(bx, by, brickW - 3, 2);
-            ctx.fillRect(bx, by, 2, brickH - 2);
-          }
-        }
-
-        // Central Stone Archway
-        const archX = Math.round(arenaW * 0.52);
-        const archW = Math.min(180, arenaW * 0.28);
-        const archH = groundY * 0.62;
-        ctx.fillStyle = '#090a0f';
-        ctx.fillRect(archX - archW / 2, groundY - archH, archW, archH);
-        ctx.fillStyle = zone.wallTrim;
-        ctx.fillRect(archX - archW / 2 - 12, groundY - archH - 12, archW + 24, 14);
-        ctx.fillRect(archX - archW / 2 - 12, groundY - archH, 12, archH);
-        ctx.fillRect(archX + archW / 2, groundY - archH, 12, archH);
-
-        // Dungeon Stone Floor
-        ctx.fillStyle = zone.floorColor;
-        ctx.fillRect(0, groundY, arenaW, arenaH - groundY);
-        ctx.fillStyle = zone.floorAccent;
-        ctx.fillRect(0, groundY, arenaW, 4);
-        for (let fx = 0; fx < arenaW; fx += 56) {
-          ctx.fillRect(fx, groundY, 3, arenaH - groundY);
-        }
-        ctx.fillRect(0, groundY + 34, arenaW, 3);
-        ctx.fillRect(0, groundY + 74, arenaW, 3);
-
-        drawDungeonProps(arenaW, groundY, zone.bannerColor);
+        // Flickering Wall Torches + Light Pools
         drawPixelTorch(Math.round(arenaW * 0.1), Math.round(groundY * 0.43), timeSec, zone.torchColor);
         drawPixelTorch(Math.round(arenaW * 0.37), Math.round(groundY * 0.36), timeSec, zone.torchColor);
         drawPixelTorch(Math.round(arenaW * 0.78), Math.round(groundY * 0.39), timeSec, zone.torchColor);
+
+        // Ambient Drifting Dungeon Dust Motes
+        ctx.fillStyle = `${zone.torchColor}66`;
+        for (const m of motesRef.current) {
+          const my = ((m.ny - timeSec * m.speedY) % 1 + 1) % 1;
+          const mx = (m.nx + Math.sin(timeSec * m.drift + m.ny * 10) * 0.025 + 1) % 1;
+          ctx.fillRect(Math.round(mx * arenaW), Math.round(my * arenaH * 0.9), m.size, m.size);
+        }
 
         if (p.damage2xActive || p.frenzyActive) {
           ctx.fillStyle = p.frenzyActive ? 'rgba(249, 115, 22, 0.08)' : 'rgba(250, 204, 21, 0.06)';
           ctx.fillRect(0, 0, arenaW, arenaH);
         }
 
-        // HERO RENDERING (with Racial Appearance!)
+        // Interactive Golden Treasure Chest
+        if (chest.active && p.isPlaying) {
+          const cBob = Math.round(Math.sin(chest.bobPhase) * 2.5);
+          const cx = Math.round(chest.x);
+          const cy = Math.round(chest.y + cBob);
+          const pulse = 0.45 + Math.sin(timeSec * 8) * 0.25;
+
+          ctx.fillStyle = 'rgba(0,0,0,0.5)';
+          ctx.beginPath();
+          ctx.ellipse(cx, chest.y + 4, 20, 6, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.strokeStyle = `rgba(250, 204, 21, ${pulse})`;
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(cx, cy - 12, 24, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.fillStyle = '#090b10';
+          ctx.fillRect(cx - 16, cy - 24, 32, 24);
+          ctx.fillStyle = '#92400e';
+          ctx.fillRect(cx - 14, cy - 22, 28, 20);
+          ctx.fillStyle = '#facc15';
+          ctx.fillRect(cx - 14, cy - 22, 28, 4);
+          ctx.fillRect(cx - 14, cy - 14, 28, 3);
+          ctx.fillRect(cx - 3, cy - 15, 6, 7);
+
+          ctx.font = '700 10px "Plus Jakarta Sans", system-ui, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#090b10';
+          ctx.fillText('LOOT!', cx + 1, cy - 30);
+          ctx.fillStyle = '#fde047';
+          ctx.fillText('LOOT!', cx, cy - 31);
+        }
+
+        // HERO RENDERING (2x EPX Sprites + Squash-and-Stretch + Safari-Safe Hit Flash)
         const heroPos = getHeroPos(arenaW, arenaH);
         const heroSprite = getHeroSprite(p.activeHero, p.activeRace);
-        const heroScale = Math.max(2.6, Math.min(5.0, arenaW / 160, arenaH / 108));
+        const heroScale = Math.max(1.3, Math.min(2.5, arenaW / 320, arenaH / 216));
         const heroDrawW = heroSprite.width * heroScale;
         const heroDrawH = heroSprite.height * heroScale;
         const heroBob = Math.round(Math.sin(timeSec * 4.2) * 2);
         const lungePx = Math.round(s.heroLunge * 22);
+        const heroStretchX = 1 + s.heroLunge * 0.09;
+        const heroStretchY = 1 - s.heroLunge * 0.06;
 
         ctx.fillStyle = 'rgba(0,0,0,0.48)';
         ctx.beginPath();
@@ -1285,25 +1646,34 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
         }
 
         ctx.save();
-        if (s.heroHitFlash > 0) {
-          ctx.filter = 'sepia(1) hue-rotate(-50deg) saturate(4)';
-        }
+        ctx.translate(Math.round(heroPos.x + lungePx), Math.round(heroPos.y + heroBob));
+        ctx.scale(heroStretchX, heroStretchY);
         ctx.drawImage(
           heroSprite,
-          Math.round(heroPos.x - heroDrawW / 2 + lungePx),
-          Math.round(heroPos.y - heroDrawH + heroBob),
+          Math.round(-heroDrawW / 2),
+          Math.round(-heroDrawH),
           Math.round(heroDrawW),
           Math.round(heroDrawH)
         );
+        if (s.heroHitFlash > 0) {
+          ctx.globalAlpha = Math.min(0.85, s.heroHitFlash * 4.5);
+          ctx.drawImage(
+            getSpriteHitFlash(heroSprite),
+            Math.round(-heroDrawW / 2),
+            Math.round(-heroDrawH),
+            Math.round(heroDrawW),
+            Math.round(heroDrawH)
+          );
+        }
         ctx.restore();
 
-        // ENEMIES RENDERING
+        // ENEMIES RENDERING (2x EPX Sprites + Squash-and-Stretch + Safari-Safe Hit Flash)
         const sortedEnemies = [...s.enemies].sort((a, b) => a.slot - b.slot);
         for (const enemy of sortedEnemies) {
           const pos = getSlotPos(enemy.slot, enemy.isBoss, arenaW, arenaH);
           const sprite = getEnemySprite(enemy.spriteId);
           const isRare = enemy.tier === 'rare' || enemy.tier === 'rare_elite';
-          const baseScale = Math.max(2.8, Math.min(5.2, arenaW / 150, arenaH / 102));
+          const baseScale = Math.max(1.4, Math.min(2.6, arenaW / 300, arenaH / 204));
           const scale =
             baseScale *
             (enemy.isBoss ? 1.42 : isRare ? 1.14 : 1) *
@@ -1337,17 +1707,27 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
           ctx.ellipse(ex, ey + 4, drawW * 0.4, 8, 0, 0, Math.PI * 2);
           ctx.fill();
 
+          const squashAmt = enemy.hitFlash > 0 ? enemy.hitFlash * 0.7 : 0;
           ctx.save();
-          if (enemy.hitFlash > 0) {
-            ctx.filter = 'brightness(2.4)';
-          }
+          ctx.translate(ex, ey + bob);
+          ctx.scale(1 - squashAmt, 1 + squashAmt * 0.75);
           ctx.drawImage(
             sprite,
-            Math.round(ex - drawW / 2),
-            Math.round(ey - drawH + bob),
+            Math.round(-drawW / 2),
+            Math.round(-drawH),
             Math.round(drawW),
             Math.round(drawH)
           );
+          if (enemy.hitFlash > 0) {
+            ctx.globalAlpha = Math.min(0.85, enemy.hitFlash * 6);
+            ctx.drawImage(
+              getSpriteHitFlash(sprite),
+              Math.round(-drawW / 2),
+              Math.round(-drawH),
+              Math.round(drawW),
+              Math.round(drawH)
+            );
+          }
           ctx.restore();
 
           // Enemy HP Bar + Counter-Skill Cooldown Bar underneath
@@ -1379,7 +1759,7 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
           ctx.fillRect(barX, castBarY, Math.round(barW * castProgress), 3);
 
           if (isTelegraphing) {
-            ctx.font = '700 10px "Pixelify Sans", monospace';
+            ctx.font = '800 10px "JetBrains Mono", monospace';
             ctx.textAlign = 'center';
             ctx.fillStyle = '#090b10';
             ctx.fillText(`! ${enemy.skillCd.toFixed(1)}s`, ex + 1, barY - (enemy.isBoss || isRare ? 19 : 6));
@@ -1394,7 +1774,7 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
                 : enemy.tier === 'rare'
                 ? `◆ ${enemy.name}`
                 : enemy.name;
-            ctx.font = `700 ${enemy.isBoss ? 13 : 11}px "Pixelify Sans", monospace`;
+            ctx.font = `700 ${enemy.isBoss ? 13 : 11}px "Plus Jakarta Sans", system-ui, sans-serif`;
             ctx.textAlign = 'center';
             ctx.fillStyle = '#090b10';
             ctx.fillText(label, ex + 1, barY - 6);
@@ -1413,7 +1793,7 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
           const tPos = getSlotPos(target.slot, target.isBoss, arenaW, arenaH);
           const hand = getHandPointerSprite();
           const hBob = Math.round(Math.sin(timeSec * 7) * 7);
-          ctx.drawImage(hand, Math.round(tPos.x - 16), Math.round(tPos.y - 115 + hBob), 44, 48);
+          ctx.drawImage(hand, Math.round(tPos.x - 16), Math.round(tPos.y - 115 + hBob), 38, 42);
         }
 
         // Arena Effects (Beams, Whirlwind Rings, Meteors, Chain Lightning)
@@ -1474,28 +1854,46 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
           ctx.globalAlpha = alpha;
 
           if (pr.style === 'cleave') {
-            ctx.strokeStyle = '#ef4444';
-            ctx.lineWidth = 8;
+            const r = 28 + pr.progress * 18;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = 'rgba(239, 68, 68, 0.45)';
+            ctx.lineWidth = 12;
             ctx.beginPath();
-            ctx.arc(pr.tx, pr.ty, 30 + pr.progress * 18, -Math.PI * 0.8, Math.PI * 0.35);
+            ctx.moveTo(pr.tx - r * 0.7, pr.ty - r * 0.9);
+            ctx.quadraticCurveTo(pr.tx + r * 0.9, pr.ty - r * 0.1, pr.tx + r * 0.35, pr.ty + r * 0.85);
+            ctx.stroke();
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.moveTo(pr.tx - r * 0.65, pr.ty - r * 0.85);
+            ctx.quadraticCurveTo(pr.tx + r * 0.85, pr.ty - r * 0.1, pr.tx + r * 0.3, pr.ty + r * 0.8);
             ctx.stroke();
             ctx.strokeStyle = '#f8fafc';
-            ctx.lineWidth = 3;
+            ctx.lineWidth = 2.5;
             ctx.beginPath();
-            ctx.arc(pr.tx, pr.ty, 27 + pr.progress * 18, -Math.PI * 0.72, Math.PI * 0.25);
+            ctx.moveTo(pr.tx - r * 0.55, pr.ty - r * 0.72);
+            ctx.quadraticCurveTo(pr.tx + r * 0.78, pr.ty - r * 0.1, pr.tx + r * 0.25, pr.ty + r * 0.7);
             ctx.stroke();
           } else if (pr.style === 'dual_slash') {
+            const sz = 22 + pr.progress * 12;
+            ctx.lineCap = 'round';
             ctx.strokeStyle = '#4ade80';
             ctx.lineWidth = 5;
-            const sz = 22 + pr.progress * 12;
             ctx.beginPath();
             ctx.moveTo(pr.tx - sz, pr.ty - sz);
-            ctx.lineTo(pr.tx + sz, pr.ty + sz);
+            ctx.quadraticCurveTo(pr.tx + 6, pr.ty - 6, pr.tx + sz, pr.ty + sz);
             ctx.stroke();
             ctx.strokeStyle = '#fda4af';
+            ctx.lineWidth = 4;
             ctx.beginPath();
             ctx.moveTo(pr.tx + sz, pr.ty - sz);
-            ctx.lineTo(pr.tx - sz, pr.ty + sz);
+            ctx.quadraticCurveTo(pr.tx - 6, pr.ty - 6, pr.tx - sz, pr.ty + sz);
+            ctx.stroke();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(pr.tx - sz * 0.7, pr.ty - sz * 0.7);
+            ctx.lineTo(pr.tx + sz * 0.7, pr.ty + sz * 0.7);
             ctx.stroke();
           } else if (pr.style === 'hammer_wave') {
             ctx.translate(cx, cy);
@@ -1572,9 +1970,9 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
         const coinImg = getCoinSprite();
         for (const c of coinsRef.current) {
           if (!c.active) continue;
-          const alpha = c.life > c.maxLife * 0.7 ? 1 - (c.life - c.maxLife * 0.7) / (c.maxLife * 0.3) : 1;
+          const alpha = c.life > c.maxLife * 0.78 ? 1 - (c.life - c.maxLife * 0.78) / (c.maxLife * 0.22) : 1;
           ctx.globalAlpha = Math.max(0, alpha);
-          ctx.drawImage(coinImg, Math.round(c.x - 10), Math.round(c.y - 10), 20, 20);
+          ctx.drawImage(coinImg, Math.round(c.x - 9), Math.round(c.y - 9), 18, 18);
         }
         ctx.globalAlpha = 1;
 
@@ -1593,7 +1991,7 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
           if (!ft.active) continue;
           const alpha = 1 - ft.life / ft.maxLife;
           ctx.globalAlpha = Math.max(0, alpha);
-          ctx.font = `700 ${Math.round(17 * ft.scale)}px "Pixelify Sans", monospace`;
+          ctx.font = `800 ${Math.round(16 * ft.scale)}px "Plus Jakarta Sans", system-ui, sans-serif`;
           ctx.textAlign = 'center';
           ctx.fillStyle = '#090b10';
           ctx.fillText(ft.text, Math.round(ft.x + 2), Math.round(ft.y + 2));

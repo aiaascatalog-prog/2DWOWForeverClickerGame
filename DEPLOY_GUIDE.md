@@ -49,8 +49,9 @@
 | **Start Screen 與種族／玩法說明** | ✅ 通過 | 開局標題畫面整合 10 種族／陣營選擇器（開始後鎖定種族與外觀）、`Start Game` / `Continue Quest`、`How to Play`、音效開關與三語切換。 |
 | **CrazyGames SDK v3 生命週期** | ✅ 通過 | 實作 `init()`、`gameplayStart()`、`gameplayStop()`（含 Pause 與說明視窗）、`happytime()`、雲端存檔與完整 6 種激勵廣告回呼。 |
 | **視窗失焦靜音與防右鍵選單** | ✅ 通過 | 監聽 `visibilitychange` 自動暫停 Web Audio，並停用 `contextmenu` 與方向鍵／空白鍵頁面捲動。 |
-| **預錄腳本與封面素材** | ✅ 通過 | `scripts/record-trailer.mjs` 與 `.github/workflows/record-trailer.yml` 已全面對齊 **World of Dungeons: Forever Clicker**，並於 `src/assets/images/` 採用魔獸奇幻風「初階精靈德魯伊 → 鹿角套裝大德魯伊」2D 像素成長封面（16:9、2:3、1:1），同步套用至 Y8 與 CrazyGames 宣傳包。 |
-| **智慧財產權與命名審查 (IP Check)** | ⚠️ 需注意 | 遊戲主標題為 **World of Dungeons: Forever Clicker**，但部分副本／首領／種族名詞仍具特定奇幻 IP 關聯；若平台商業審查要求，建議改為原創地名與首領名。 |
+| **預錄腳本與封面素材** | ✅ 通過 | `scripts/record-trailer.mjs` 與 `.github/workflows/record-trailer.yml` 已全面對齊 **World of Dungeons: Forever Clicker**，並於 `src/assets/images/` 採用奇幻風「初階精靈德魯伊 → 鹿角套裝大德魯伊」2D 像素成長封面（16:9、2:3、1:1），同步套用至 Y8 與 CrazyGames 宣傳包。 |
+| **視覺與音效品質強化** | ✅ 通過 | 角色與怪物採用 2× EPX 邊緣平滑與立體明暗著色、快取石砌地城背景與動態火把光暈、磁吸金幣飛行、寶箱點擊彩蛋、跨瀏覽器打擊白閃，以及全平台縮放高清晰字體排版。 |
+| **智慧財產權與命名審查 (IP Check)** | ✅ 通過 | 已全面將副本、團隊副本、首領、種族與聖物名稱改寫為原創奇幻命名（如 Aetheris Isle、Ashencrown、Arcanum Spire、Worldroot Summit、Obsidian Lair、Heart of the Realm 等），避免商業版權衝突。 |
 | **Google Fonts 外部字型載入** | ℹ️ 建議知悉 | `index.html` 引用 `fonts.googleapis.com`；若平台封鎖外部字型請求，CSS 已設定系統無襯線與等寬備援字型，不影響遊玩。 |
 
 ---

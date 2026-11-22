@@ -32,25 +32,67 @@ class SoundEngine {
   }
 
   public playClick(isCrit = false, combo = 0) {
+    this.playHit('cleave', isCrit, combo);
+  }
+
+  public playHit(style: string, isCrit = false, combo = 0) {
     const ctx = this.ensureContext();
     if (!ctx) return;
 
     const now = ctx.currentTime;
     const osc = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
     const gain = ctx.createGain();
 
-    const baseFreq = isCrit ? 480 : 190 + Math.min(combo * 10, 160);
-    osc.type = isCrit ? 'sawtooth' : 'triangle';
-    osc.frequency.setValueAtTime(baseFreq * 1.4, now);
-    osc.frequency.exponentialRampToValueAtTime(isCrit ? 120 : 85, now + (isCrit ? 0.11 : 0.065));
+    const pitchBoost = Math.min(combo * 8, 120);
+    let wave: OscillatorType = 'triangle';
+    let startFreq = 220 + pitchBoost;
+    let endFreq = 95;
+    let dur = 0.075;
 
-    gain.gain.setValueAtTime(isCrit ? 0.13 : 0.08, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + (isCrit ? 0.12 : 0.07));
+    if (style === 'arrow') {
+      wave = 'triangle';
+      startFreq = 520 + pitchBoost * 0.5;
+      endFreq = 190;
+      dur = 0.065;
+    } else if (style === 'frost_orb' || style === 'moonfire' || style === 'holy_beam') {
+      wave = 'sine';
+      startFreq = (style === 'holy_beam' ? 660 : 540) + pitchBoost * 0.6;
+      endFreq = 280;
+      dur = 0.095;
+    } else if (style === 'lightning' || style === 'fel_bolt') {
+      wave = 'triangle';
+      startFreq = 360 + pitchBoost;
+      endFreq = 130;
+      dur = 0.085;
+    } else if (style === 'hammer_wave') {
+      wave = 'triangle';
+      startFreq = 165 + pitchBoost * 0.4;
+      endFreq = 65;
+      dur = 0.1;
+    }
 
-    osc.connect(gain);
+    if (isCrit) {
+      startFreq *= 1.38;
+      dur += 0.03;
+    }
+
+    osc.type = isCrit ? 'triangle' : wave;
+    osc.frequency.setValueAtTime(startFreq, now);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(40, endFreq), now + dur);
+
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(isCrit ? 2600 : 1800, now);
+
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(isCrit ? 0.12 : 0.075, now + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+    osc.connect(filter);
+    filter.connect(gain);
     gain.connect(ctx.destination);
     osc.start(now);
-    osc.stop(now + (isCrit ? 0.13 : 0.08));
+    osc.stop(now + dur + 0.02);
   }
 
   public playEnemyDefeat(isBoss = false) {
@@ -58,14 +100,14 @@ class SoundEngine {
     if (!ctx) return;
 
     const now = ctx.currentTime;
-    const notes = isBoss ? [330, 440, 554.37, 659.25, 880] : [783.99, 1046.5];
+    const notes = isBoss ? [330, 440, 554.37, 659.25, 880] : [659.25, 987.77];
     notes.forEach((freq, idx) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = isBoss ? 'triangle' : 'sine';
       osc.frequency.setValueAtTime(freq, now + idx * 0.045);
 
-      gain.gain.setValueAtTime(isBoss ? 0.12 : 0.07, now + idx * 0.045);
+      gain.gain.setValueAtTime(isBoss ? 0.11 : 0.065, now + idx * 0.045);
       gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.045 + (isBoss ? 0.28 : 0.14));
 
       osc.connect(gain);
@@ -84,11 +126,11 @@ class SoundEngine {
     freqs.forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.type = 'sawtooth';
+      osc.type = 'triangle';
       osc.frequency.setValueAtTime(freq, now + i * 0.04);
-      osc.frequency.exponentialRampToValueAtTime(freq * 1.2, now + i * 0.04 + 0.18);
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.18, now + i * 0.04 + 0.18);
 
-      gain.gain.setValueAtTime(0.065, now + i * 0.04);
+      gain.gain.setValueAtTime(0.06, now + i * 0.04);
       gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.04 + 0.22);
 
       osc.connect(gain);
@@ -111,7 +153,7 @@ class SoundEngine {
       osc.frequency.setValueAtTime(freq, now + idx * 0.04);
 
       gain.gain.setValueAtTime(0.001, now + idx * 0.04);
-      gain.gain.linearRampToValueAtTime(0.09, now + idx * 0.04 + 0.01);
+      gain.gain.linearRampToValueAtTime(0.085, now + idx * 0.04 + 0.01);
       gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.04 + 0.14);
 
       osc.connect(gain);
@@ -130,14 +172,14 @@ class SoundEngine {
     if (!ctx) return;
 
     const now = ctx.currentTime;
-    const notes = [587.33, 783.99, 987.77, 1174.66];
+    const notes = [587.33, 783.99, 987.77, 1174.66, 1318.51];
     notes.forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sine';
       osc.frequency.setValueAtTime(freq, now + i * 0.04);
 
-      gain.gain.setValueAtTime(0.11, now + i * 0.04);
+      gain.gain.setValueAtTime(0.095, now + i * 0.04);
       gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.04 + 0.22);
 
       osc.connect(gain);

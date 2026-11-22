@@ -16,10 +16,10 @@ A crisp 2D pixel-art RPG dungeon clicker featuring **9 playable classes**, **10 
   > Assemble your hero and battle through endless pixel-art corridors in **World of Dungeons: Forever Clicker**!
   >
   > **Key Features:**
-  > - **Pick Your Race at Start (Locked Per Run):** Choose from 10 race/faction origins (Human, Dwarf, Night Elf, Gnome, Skyborne High Order, Orc, Undead, Tauren, Troll, Skyborne Windshaper). Your race trait and custom pixel sprite appearance lock in when your quest begins!
+  > - **Pick Your Race at Start (Locked Per Run):** Choose from 10 race/faction origins (Human, Dwarf, Night Elf, Gnome, Skyborne High Order, Orc, Undead, Minotaur, Troll, Skyborne Windshaper). Your race trait and custom pixel sprite appearance lock in when your quest begins!
   > - **Pay Coins to Change Class Mid-Run:** Unlock and switch anytime between **9 Classes** (Warrior, Hunter, Priest, Mage, Rogue, Shaman, Paladin, Druid, Warlock) using Gold—with a **-30% Racial Affinity discount** for lore-matching classes.
-  > - **Unique Primary Attacks & Individual Skill Upgrades:** Every class brings its own Primary Attack (e.g., *Heroic Cleave*, *Lightforged Hammer*, *Frostfire Lance*, *Soulfire Bolt*) with distinct 2D pixel VFX plus **2 Countdown Auto-Skills** that each upgrade independently for higher power and faster cooldowns.
-  > - **Enemy Counter-Attacks & Tactile Defense:** Watch enemy cast bars! Enemies telegraph cooldown skills that steal Gold unless you tap to stagger them, block them with Paladin *Consecration*, or activate **Coin Ward**.
+  > - **Unique Primary Attacks & Individual Skill Upgrades:** Every class brings its own Primary Attack (e.g., *Sundering Cleave*, *Lightforged Hammer*, *Frostfire Lance*, *Soulfire Bolt*) with distinct 2D pixel VFX plus **2 Countdown Auto-Skills** that each upgrade independently for higher power and faster cooldowns.
+  > - **Enemy Counter-Attacks & Golden Treasure Chests:** Watch enemy cast bars! Enemies telegraph cooldown skills that steal Gold unless you tap to stagger them, block them with Paladin *Consecration*, or activate **Coin Ward**. Tap periodic Golden Treasure Chests on the dungeon floor for bonus Gold bursts!
   > - **13 Dungeon & Raid Zones + Rare Hunts:** Fight across 9 dungeons and 3 launch raids while hunting silver-ringed Rares and violet-ringed Rare Elites for bonus Soul Shards.
   > - **Rewarded Buffs & Recovery:** Activate **2X Damage**, **Coin Ward** (blocks coin theft), **2X Haste** (halves auto-skill cooldowns), **Reclaim 150% Lost Gold**, **Boss Second Wind**, and **2x Offline Raid Loot**.
 
@@ -72,10 +72,10 @@ A crisp 2D pixel-art RPG dungeon clicker featuring **9 playable classes**, **10 
   - **2 Class Countdown Auto-Skills** (`classSkillLevels[skillId]`), each upgraded individually (`x1`, `x10`, `MAX`) for independent damage and cooldown reduction (`-1.5%` CD/level, capped at `0.75` base multiplier before Relics/Haste).
   - **4 Shared Attribute Upgrades:** `Blood Fury` (All Damage), `Goblin Greed` (Gold), `Deadly Precision` (Crit Chance), `Titan's Might` (Hybrid Tap + Skill Power).
 - **Enemy Cooldown Counter-Attacks & Floor Loop:**
-  - 10 enemies per standard floor; every 5th floor spawns a timed Boss (`30s` base timer + Heart of Azeroth bonus). Standard floors have a 14% chance to spawn **Rare** or **Rare Elite** enemies (`+4x` Gold + `1` Soul Shard).
-  - Enemies charge cooldown skills (`Pickpocket`, `Gold Siphon`, Boss `Vault Plunder`); tapping an enemy delays its cast by `+0.8s` (up to 3 staggers). Unblocked casts steal Gold into `stolenGoldBank` (recoverable at `150%` via Reclaim Gold).
-- **3 Active Skills:** `Bloodlust` (`1`, floor 5), `Gold Rush` (`2`, floor 15), `Lightning Smite` (`3`, floor 25).
-- **5 Soul Forge Relics:** `Warchief's Totem`, `Gadgetzan Coin`, `Frostblade Shard`, `Kirin Tor Crystal`, `Heart of Azeroth`.
+  - 10 enemies per standard floor; every 5th floor spawns a timed Boss (`30s` base timer + Heart of the Realm bonus). Standard floors have a 14% chance to spawn **Rare** or **Rare Elite** enemies (`+4x` Gold + `1` Soul Shard), and periodic Golden Treasure Chests spawn on the floor for bonus Gold.
+  - Enemies charge cooldown skills (`Pickpocket`, `Shadow Snatch`, `Boss Plunder`); tapping an enemy delays its cast by `+0.45s` (up to 3 staggers). Unblocked casts steal Gold into `stolenGoldBank` (recoverable at `150%` via Reclaim Gold).
+- **3 Active Skills:** `Bloodlust` (`1`, floor 3), `Gold Rush` (`2`, floor 6), `Arcane Smite` (`3`, floor 10).
+- **5 Soul Forge Relics:** `Warlord's Totem`, `Goblin Merchant Coin`, `Frostblade Shard`, `Arcane Spire Crystal`, `Heart of the Realm`.
 - **Spirit Ascension:** Available from Floor 10+, resetting floor & coin upgrades into permanent Heroic Emblems (`+25%` Damage and `+15%` Gold per emblem) while preserving your locked Race, unlocked Classes, Relics, Soul Shards, and Quests.
 
 ---
@@ -83,8 +83,8 @@ A crisp 2D pixel-art RPG dungeon clicker featuring **9 playable classes**, **10 
 ## 4. Technical Spec & Configuration Alignment
 
 - **Frontend Stack:** React 19, TypeScript, Tailwind CSS v4, Lucide Icons, Vite 8 (`base: './'` for portable relative-path portal bundles).
-- **Render Loop:** 60fps `requestAnimationFrame` `<canvas>` with clamped delta time (`Math.min(rawDt, 0.05)`), DPR scaling, pre-baked offscreen `20×18` race×class & `16×16` pixel sprites (`imageSmoothingEnabled = false`), and pooled particles/floating text.
-- **Audio:** Procedural Web Audio API synthesizer (`src/audio/synth.ts`) with mute toggle and automatic `visibilitychange` / rewarded-ad pause handling.
+- **Render Loop:** 60fps `requestAnimationFrame` `<canvas>` with clamped delta time (`Math.min(rawDt, 0.05)`), DPR scaling, cached offscreen dungeon backdrops with Gothic archways & dynamic torchlight, pre-baked 2× EPX-shaded sprites (`imageSmoothingEnabled = false`), magnet coin arcs, and pooled particles/floating text.
+- **Audio:** Procedural low-pass filtered Web Audio API synthesizer (`src/audio/synth.ts`) with distinct hit profiles per class attack style, mute toggle, and automatic `visibilitychange` / rewarded-ad pause handling.
 - **Persistence:** `localStorage` (`wow_forever_dungeon_clicker_v2`) + CrazyGames Cloud Data sync (`src/sdk/crazygames.ts`), auto-saved every 5 seconds, with automatic migration from legacy `sharp_blade` / `auto_attack` saves.
 - **Local Scripts & Portal Builds (`package.json` & `vite.config.ts`):**
   - `npm run dev` — Dev server on port `3000`.
