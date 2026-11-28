@@ -85,12 +85,19 @@ A crisp 2D pixel-art RPG dungeon clicker featuring **9 playable classes**, **10 
 - **Frontend Stack:** React 19, TypeScript, Tailwind CSS v4, Lucide Icons, Vite 8 (`base: './'` for portable relative-path portal bundles).
 - **Render Loop:** 60fps `requestAnimationFrame` `<canvas>` with clamped delta time (`Math.min(rawDt, 0.05)`), DPR scaling, cached offscreen dungeon backdrops with Gothic archways & dynamic torchlight, pre-baked 2× EPX-shaded sprites (`imageSmoothingEnabled = false`), magnet coin arcs, and pooled particles/floating text.
 - **Audio:** Procedural low-pass filtered Web Audio API synthesizer (`src/audio/synth.ts`) with distinct hit profiles per class attack style, mute toggle, and automatic `visibilitychange` / rewarded-ad pause handling.
-- **Persistence:** `localStorage` (`wow_forever_dungeon_clicker_v2`) + CrazyGames Cloud Data sync (`src/sdk/crazygames.ts`), auto-saved every 5 seconds, with automatic migration from legacy `sharp_blade` / `auto_attack` saves.
+- **Persistence & Multi-Portal SDKs (`src/sdk/`):**
+  - **Strict Build-Time Portal Isolation (`src/sdk/platform.ts`):** Routes cleanly based on `VITE_PORTAL` so each platform bundle contains only its own SDK.
+  - **CrazyGames SDK v3 (`src/sdk/crazygames.ts`):** `init`, `gameplayStart`/`gameplayStop`, `happytime`, Cloud Data, Rewarded Ads, and optional AES-GCM encrypted leaderboard score submission (`VITE_CG_LEADERBOARD_KEY`).
+  - **BountyBoard Arcade SDK (`src/sdk/bountyboard.ts`):** `init`, `gameLoadingFinished`, `gameplayStart`/`gameplayStop`, `getPlayer`/`onPlayerChange`, cloud save + opaque-origin `localStorage` shim integration, synchronous-gesture `prepareRewardedAd()` + `rewardedAd()` fallback, and `submitScore`/`gameOver`.
+  - **Y8 Minimal SDK v2 (`src/sdk/y8.ts`):** `init` (`VITE_Y8_APP_ID`), OAuth login, cloud `saveData`/`loadData`, Rewarded Ads (`showAd`), and `saveLeaderboardScore`/`getLeaderboardScores`/`showLeaderboard`.
+  - **Hall of Heroes Leaderboard:** Built-in Trophy modal combining live portal leaderboard sync/entries with local personal best run records.
 - **Local Scripts & Portal Builds (`package.json` & `vite.config.ts`):**
   - `npm run dev` — Dev server on port `3000`.
   - `npm run lint` — Strict TypeScript check (`tsc --noEmit`).
-  - `npm run build` — Generic static bundle in `dist/` (zero external SDK scripts; Y8, GamePix, itch.io, GitHub Pages).
-  - `npm run build:crazygames` — CrazyGames SDK v3 bundle in `dist-cg/` (`VITE_PORTAL=crazygames`, injects `https://sdk.crazygames.com/crazygames-sdk-v3.js`).
+  - `npm run build` — Generic static bundle in `dist/` (zero external SDK scripts; GitHub Pages, GamePix, itch.io).
+  - `npm run build:crazygames` — CrazyGames SDK v3 bundle in `dist-cg/` (`VITE_PORTAL=crazygames`).
+  - `npm run build:bountyboard` — BountyBoard Arcade SDK bundle in `dist-bb/` (`VITE_PORTAL=bountyboard`, injects `https://www.bountyboard.gg/arcade-sdk/v1.js`).
+  - `npm run build:y8` — Y8 Minimal SDK v2 bundle in `dist-y8/` (`VITE_PORTAL=y8`, injects `https://cdn.y8.com/minimal-sdk/2-0/y8.min.js`).
 
 ---
 

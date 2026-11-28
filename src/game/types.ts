@@ -3,6 +3,8 @@ export type Locale = 'en' | 'zh-TW' | 'zh-CN';
 export type DockTab = 'upgrades' | 'heroes' | 'skills' | 'quests' | 'relics' | 'ascension';
 export type BuyAmount = 1 | 10 | 'max';
 
+export type HeroEvolutionTier = 1 | 2 | 3 | 4;
+
 export type HeroId =
   | 'warrior'
   | 'paladin'

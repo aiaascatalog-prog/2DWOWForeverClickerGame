@@ -30,7 +30,7 @@ jobs:
       - name: TypeScript type check
         run: npm run lint
 
-      - name: Build generic static bundle (Y8 / GamePix / itch.io / Pages)
+      - name: Build generic static bundle (GitHub Pages / GamePix / itch.io)
         run: npm run build
 
       - name: Package game-portal-release.zip (Zero external SDK)
@@ -38,12 +38,29 @@ jobs:
         run: zip -r ../game-portal-release.zip .
 
       - name: Build CrazyGames SDK v3 bundle & package crazygames-release.zip
+        env:
+          VITE_CG_LEADERBOARD_KEY: ${{ secrets.VITE_CG_LEADERBOARD_KEY }}
         run: |
           rm -rf dist-cg
           npm run build:crazygames
           (cd dist-cg && zip -r ../crazygames-release.zip .)
 
-      - name: Upload game-portal-release.zip Artifact (Y8 / GamePix / itch.io)
+      - name: Build BountyBoard Arcade SDK bundle & package bountyboard-release.zip
+        run: |
+          rm -rf dist-bb
+          npm run build:bountyboard
+          (cd dist-bb && zip -r ../bountyboard-release.zip .)
+
+      - name: Build Y8 Minimal SDK v2 bundle & package y8-release.zip
+        env:
+          VITE_Y8_APP_ID: ${{ vars.VITE_Y8_APP_ID || secrets.VITE_Y8_APP_ID }}
+          VITE_Y8_LEADERBOARD_TABLE: ${{ vars.VITE_Y8_LEADERBOARD_TABLE }}
+        run: |
+          rm -rf dist-y8
+          npm run build:y8
+          (cd dist-y8 && zip -r ../y8-release.zip .)
+
+      - name: Upload game-portal-release.zip Artifact (Pages / GamePix / itch.io)
         uses: actions/upload-artifact@v6
         with:
           name: game-portal-release
@@ -55,6 +72,20 @@ jobs:
         with:
           name: crazygames-release
           path: crazygames-release.zip
+          retention-days: 30
+
+      - name: Upload bountyboard-release.zip Artifact (With BountyBoard Arcade SDK)
+        uses: actions/upload-artifact@v6
+        with:
+          name: bountyboard-release
+          path: bountyboard-release.zip
+          retention-days: 30
+
+      - name: Upload y8-release.zip Artifact (With Y8 Minimal SDK v2)
+        uses: actions/upload-artifact@v6
+        with:
+          name: y8-release
+          path: y8-release.zip
           retention-days: 30
 
       - name: Check if GitHub Pages (GitHub Actions source) is enabled
@@ -74,7 +105,7 @@ jobs:
             echo "### GitHub Pages Skipped (Not Enabled Yet)" >> "$GITHUB_STEP_SUMMARY"
             echo "To enable automatic GitHub Pages deployment, open **Settings -> Pages** in this repository and set **Build and deployment -> Source** to **GitHub Actions**." >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "Your portal ZIP artifacts (\`game-portal-release\` and \`crazygames-release\`) were built and uploaded normally." >> "$GITHUB_STEP_SUMMARY"
+            echo "Your portal ZIP artifacts (\`game-portal-release\`, \`crazygames-release\`, \`bountyboard-release\`, and \`y8-release\`) were built and uploaded normally." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Upload GitHub Pages Artifact

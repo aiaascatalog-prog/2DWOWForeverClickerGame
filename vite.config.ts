@@ -4,7 +4,7 @@ import path from 'path';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
-  const isCrazyGamesBuild = process.env.VITE_PORTAL === 'crazygames';
+  const portal = (process.env.VITE_PORTAL || '').trim().toLowerCase();
   return {
     base: './',
     plugins: [
@@ -15,8 +15,15 @@ export default defineConfig(() => {
         transformIndexHtml: {
           order: 'pre',
           handler(html) {
-            if (!isCrazyGamesBuild) return html;
-            const sdkTag = '    <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>\n';
+            let sdkTag = '';
+            if (portal === 'crazygames') {
+              sdkTag = '    <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>\n';
+            } else if (portal === 'bountyboard') {
+              sdkTag = '    <script src="https://www.bountyboard.gg/arcade-sdk/v1.js"></script>\n';
+            } else if (portal === 'y8') {
+              sdkTag = '    <script src="https://cdn.y8.com/minimal-sdk/2-0/y8.min.js" async></script>\n';
+            }
+            if (!sdkTag) return html;
             return html.replace('</head>', `${sdkTag}  </head>`);
           },
         },

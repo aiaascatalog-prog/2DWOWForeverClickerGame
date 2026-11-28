@@ -2,8 +2,10 @@ import {
   BuyAmount,
   DungeonZone,
   HeroDef,
+  HeroEvolutionTier,
   HeroId,
   Locale,
+  LocalizedText,
   QuestDef,
   RaceDef,
   RaceId,
@@ -1219,6 +1221,22 @@ export const UI_COPY: Record<
     adUnavailable: string;
     tapDmgShort: string;
     dpsShort: string;
+    leaderboardBtn: string;
+    leaderboardTitle: string;
+    leaderboardScoreLabel: string;
+    leaderboardYourBest: string;
+    leaderboardFloorCol: string;
+    leaderboardPlayerCol: string;
+    leaderboardScoreCol: string;
+    leaderboardEmpty: string;
+    leaderboardSignIn: string;
+    leaderboardOpenNative: string;
+    leaderboardRefresh: string;
+    leaderboardStatusSynced: string;
+    leaderboardStatusGuest: string;
+    leaderboardStatusPortalUi: string;
+    leaderboardStatusUnconfigured: string;
+    leaderboardStatusLocal: string;
   }
 > = {
   en: {
@@ -1307,6 +1325,22 @@ export const UI_COPY: Record<
     adUnavailable: 'Ad unavailable right now — try again shortly',
     tapDmgShort: 'Tap',
     dpsShort: 'Skill',
+    leaderboardBtn: 'Leaderboard',
+    leaderboardTitle: 'HALL OF HEROES',
+    leaderboardScoreLabel: 'Run Score',
+    leaderboardYourBest: 'Best Run',
+    leaderboardFloorCol: 'Floor',
+    leaderboardPlayerCol: 'Adventurer',
+    leaderboardScoreCol: 'Score',
+    leaderboardEmpty: 'Clear monsters to record your first dungeon score!',
+    leaderboardSignIn: 'Sign In to Rank',
+    leaderboardOpenNative: 'Open Portal Board',
+    leaderboardRefresh: 'Refresh',
+    leaderboardStatusSynced: 'Connected & synced with global portal leaderboard',
+    leaderboardStatusGuest: 'Guest mode — sign in on the portal to publish your rank',
+    leaderboardStatusPortalUi: 'Score auto-synced to portal leaderboard',
+    leaderboardStatusUnconfigured: 'Portal leaderboard key not configured yet — tracking local Hall of Heroes',
+    leaderboardStatusLocal: 'Local Hall of Heroes (Browser Save)',
   },
   'zh-TW': {
     gameTitle: '地下城世界',
@@ -1393,6 +1427,22 @@ export const UI_COPY: Record<
     adUnavailable: '暫無可用廣告，請稍後再試',
     tapDmgShort: '點擊',
     dpsShort: '奧義',
+    leaderboardBtn: '排行榜',
+    leaderboardTitle: '英雄排行榜',
+    leaderboardScoreLabel: '本局積分',
+    leaderboardYourBest: '最高紀錄',
+    leaderboardFloorCol: '層數',
+    leaderboardPlayerCol: '冒險者',
+    leaderboardScoreCol: '積分',
+    leaderboardEmpty: '擊敗怪物即可寫入你的首筆地城戰績！',
+    leaderboardSignIn: '登入帳號參與排名',
+    leaderboardOpenNative: '開啟平台榜單',
+    leaderboardRefresh: '重新整理',
+    leaderboardStatusSynced: '已連線並即時同步平台全球排行榜',
+    leaderboardStatusGuest: '訪客模式 — 登入平台帳號即可上傳正式排名',
+    leaderboardStatusPortalUi: '積分已自動同步至平台排行榜（可於平台頁面查看完整榜單）',
+    leaderboardStatusUnconfigured: '尚未設定平台金鑰 — 目前顯示本機英雄榜',
+    leaderboardStatusLocal: '本機英雄殿堂（瀏覽器存檔排行）',
   },
   'zh-CN': {
     gameTitle: '地下城世界',
@@ -1479,6 +1529,22 @@ export const UI_COPY: Record<
     adUnavailable: '暂无可用广告，请稍后再试',
     tapDmgShort: '点击',
     dpsShort: '奥义',
+    leaderboardBtn: '排行榜',
+    leaderboardTitle: '英雄排行榜',
+    leaderboardScoreLabel: '本局积分',
+    leaderboardYourBest: '最高纪录',
+    leaderboardFloorCol: '层数',
+    leaderboardPlayerCol: '冒险者',
+    leaderboardScoreCol: '积分',
+    leaderboardEmpty: '击败怪物即可记录你的首笔地城战绩！',
+    leaderboardSignIn: '登录账号参与排名',
+    leaderboardOpenNative: '打开平台榜单',
+    leaderboardRefresh: '刷新',
+    leaderboardStatusSynced: '已连接并实时同步平台全球排行榜',
+    leaderboardStatusGuest: '访客模式 — 登录平台账号即可上传正式排名',
+    leaderboardStatusPortalUi: '积分已自动同步至平台排行榜（可在平台页面查看完整榜单）',
+    leaderboardStatusUnconfigured: '尚未配置平台密钥 — 当前显示本地英雄榜',
+    leaderboardStatusLocal: '本地英雄殿堂（浏览器存档排行）',
   },
 };
 
@@ -1682,6 +1748,22 @@ export function calculatePendingEmblems(state: SaveState): number {
   return Math.max(1, raw);
 }
 
+export function computeLeaderboardScore(state: SaveState): number {
+  if (state.totalKills <= 0 && state.maxFloor <= 1 && state.ascensionCount <= 0) {
+    return 0;
+  }
+  return Math.max(
+    1,
+    Math.floor(
+      state.maxFloor * 100 +
+        state.bossesSlain * 50 +
+        state.raresSlain * 15 +
+        state.ascensionCount * 500 +
+        Math.min(99, Math.max(0, state.killsOnFloor) * 9)
+    )
+  );
+}
+
 export function formatNumber(n: number): string {
   if (!Number.isFinite(n) || n < 0) return '0';
   if (n < 1000) {
@@ -1698,6 +1780,28 @@ export function formatNumber(n: number): string {
 
 export function getHeroRank(save: SaveState, id: HeroId): number {
   return save.heroRanks[id] || 1;
+}
+
+export const HERO_TIER_LABELS: Record<HeroEvolutionTier, LocalizedText> = {
+  1: { en: 'Novice', 'zh-TW': '初階', 'zh-CN': '初阶' },
+  2: { en: 'Veteran', 'zh-TW': '精銳', 'zh-CN': '精锐' },
+  3: { en: 'Champion', 'zh-TW': '宗師', 'zh-CN': '宗师' },
+  4: { en: 'Mythic', 'zh-TW': '傳說', 'zh-CN': '传说' },
+};
+
+export function getHeroEvolutionTier(save: SaveState, id: HeroId): HeroEvolutionTier {
+  const rank = getHeroRank(save, id);
+  const hero = HEROES.find((h) => h.id === id);
+  const atkLv = getClassAttackLevel(save, id);
+  const sk0Lv = hero ? getClassSkillLevel(save, hero.autoSkills[0].id) : 1;
+  const sk1Lv = hero ? getClassSkillLevel(save, hero.autoSkills[1].id) : 1;
+  const mastery = Math.max(0, atkLv + sk0Lv + sk1Lv - 3);
+  const powerScore = Math.max(0, rank - 1) * 4 + mastery;
+
+  if (rank >= 10 || powerScore >= 38) return 4;
+  if (rank >= 6 || powerScore >= 18) return 3;
+  if (rank >= 3 || powerScore >= 6) return 2;
+  return 1;
 }
 
 export function getSkillLevel(save: SaveState, id: SkillId): number {

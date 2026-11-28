@@ -18,7 +18,7 @@ import {
   getHeroSprite,
   getSpriteHitFlash,
 } from '../game/pixelSprites';
-import { ClassAttackStyle, ClassAutoSkillDef, EnemyTier, HeroId, RaceId } from '../game/types';
+import { ClassAttackStyle, ClassAutoSkillDef, EnemyTier, HeroEvolutionTier, HeroId, RaceId } from '../game/types';
 
 export interface CombatEnemy {
   uid: number;
@@ -119,6 +119,7 @@ export interface GameCanvasHandle {
   triggerPlayerAttack: () => void;
   triggerSmite: (damage: number) => void;
   triggerBossSecondWind: () => void;
+  triggerEvolutionBurst: () => void;
   triggerShake: (intensity: number) => void;
   resetFloorWave: (newFloor: number) => void;
   spawnGoldLostPopup: (goldLost: number) => void;
@@ -130,6 +131,7 @@ interface GameCanvasProps {
   killsOnFloor: number;
   activeHero: HeroId;
   activeRace: RaceId;
+  heroEvolutionTier: HeroEvolutionTier;
   attackStyle: ClassAttackStyle;
   autoSkills: [ClassAutoSkillDef, ClassAutoSkillDef];
   heroProjectileColor: string;
@@ -172,6 +174,7 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
       killsOnFloor,
       activeHero,
       activeRace,
+      heroEvolutionTier,
       attackStyle,
       autoSkills,
       heroProjectileColor,
@@ -208,6 +211,7 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
       killsOnFloor,
       activeHero,
       activeRace,
+      heroEvolutionTier,
       attackStyle,
       autoSkills,
       heroProjectileColor,
@@ -233,6 +237,7 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
       killsOnFloor,
       activeHero,
       activeRace,
+      heroEvolutionTier,
       attackStyle,
       autoSkills,
       heroProjectileColor,
@@ -846,6 +851,18 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
           s.shake = Math.max(s.shake, 10);
           applyDamageToEnemy(boss, Math.max(10, boss.maxHp * 0.25), true, true, '#fde047');
         }
+      },
+      triggerEvolutionBurst() {
+        const s = simRef.current;
+        const { w, h } = getViewportSize();
+        const { arenaW, arenaH } = getArenaRect(w, h);
+        const heroPos = getHeroPos(arenaW, arenaH);
+        const auraColor = propsRef.current.heroProjectileColor || '#facc15';
+        s.shake = Math.max(s.shake, 8);
+        spawnArenaEffect('beam', heroPos.x, 0, heroPos.x, heroPos.y - 6, '#fde047', 22, 0.5);
+        spawnArenaEffect('ring', heroPos.x, heroPos.y - 26, heroPos.x, heroPos.y - 26, auraColor, 72, 0.45);
+        spawnParticles(heroPos.x, heroPos.y - 36, 28, '#fde047', 160);
+        spawnParticles(heroPos.x, heroPos.y - 36, 18, auraColor, 180);
       },
       triggerShake(intensity: number) {
         simRef.current.shake = Math.max(simRef.current.shake, intensity);
@@ -1609,27 +1626,69 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
           ctx.fillText('LOOT!', cx, cy - 31);
         }
 
-        // HERO RENDERING (2x EPX Sprites + Squash-and-Stretch + Safari-Safe Hit Flash)
+        // HERO RENDERING (2x EPX 60x56 Sprites + 4-Tier Evolution Scale & Aura + Squash-and-Stretch)
         const heroPos = getHeroPos(arenaW, arenaH);
-        const heroSprite = getHeroSprite(p.activeHero, p.activeRace);
-        const heroScale = Math.max(1.3, Math.min(2.5, arenaW / 320, arenaH / 216));
+        const heroTier = p.heroEvolutionTier;
+        const heroSprite = getHeroSprite(p.activeHero, p.activeRace, heroTier);
+        const baseHeroScale = Math.max(1.3, Math.min(2.5, arenaW / 320, arenaH / 216));
+        const tierScale =
+          heroTier === 1 ? 0.74 : heroTier === 2 ? 0.80 : heroTier === 3 ? 0.86 : 0.93;
+        const heroScale = baseHeroScale * tierScale;
         const heroDrawW = heroSprite.width * heroScale;
         const heroDrawH = heroSprite.height * heroScale;
         const heroBob = Math.round(Math.sin(timeSec * 4.2) * 2);
         const lungePx = Math.round(s.heroLunge * 22);
         const heroStretchX = 1 + s.heroLunge * 0.09;
         const heroStretchY = 1 - s.heroLunge * 0.06;
+        const hx = heroPos.x + lungePx;
+        const hy = heroPos.y;
 
         ctx.fillStyle = 'rgba(0,0,0,0.48)';
         ctx.beginPath();
-        ctx.ellipse(heroPos.x + lungePx, heroPos.y + 4, heroDrawW * 0.42, 8, 0, 0, Math.PI * 2);
+        ctx.ellipse(hx, hy + 4, heroDrawW * 0.40, 8, 0, 0, Math.PI * 2);
         ctx.fill();
+
+        // Class Evolution Floor & Orbiting Energy Aura (Tier 2 -> Tier 4 Mythic)
+        if (heroTier >= 2) {
+          ctx.save();
+          const auraPulse = 0.55 + Math.sin(timeSec * 5.2) * 0.22;
+          ctx.strokeStyle = p.heroProjectileColor;
+          ctx.globalAlpha = heroTier === 2 ? 0.35 * auraPulse : heroTier === 3 ? 0.62 * auraPulse : 0.82 * auraPulse;
+          ctx.lineWidth = heroTier >= 4 ? 3 : 2;
+          ctx.beginPath();
+          ctx.ellipse(hx, hy + 4, heroDrawW * (0.44 + heroTier * 0.03), 9 + heroTier * 1.2, 0, 0, Math.PI * 2);
+          ctx.stroke();
+
+          if (heroTier >= 3) {
+            ctx.strokeStyle = '#fde047';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([7, 5]);
+            ctx.lineDashOffset = -timeSec * 36;
+            ctx.beginPath();
+            ctx.ellipse(hx, hy + 4, heroDrawW * 0.58, 12, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+
+          if (heroTier >= 4) {
+            // Mythic rising arcane/fire motes + golden outer aura ring
+            for (let m = 0; m < 4; m++) {
+              const phase = (timeSec * 1.4 + m * 0.25) % 1;
+              const mx = hx + Math.sin(timeSec * 3.1 + m * 1.7) * (heroDrawW * 0.38);
+              const my = hy - phase * (heroDrawH * 0.92);
+              ctx.globalAlpha = (1 - phase) * 0.85;
+              ctx.fillStyle = m % 2 === 0 ? '#fde047' : p.heroProjectileColor;
+              ctx.fillRect(Math.round(mx - 2), Math.round(my - 2), 4, 4);
+            }
+          }
+          ctx.restore();
+        }
 
         if (p.frenzyActive || p.damage2xActive) {
           ctx.strokeStyle = p.frenzyActive ? '#f97316' : '#facc15';
           ctx.lineWidth = 3;
           ctx.beginPath();
-          ctx.ellipse(heroPos.x + lungePx, heroPos.y + 4, heroDrawW * 0.52, 11, 0, 0, Math.PI * 2);
+          ctx.ellipse(hx, hy + 4, heroDrawW * 0.52, 11, 0, 0, Math.PI * 2);
           ctx.stroke();
         }
 
@@ -1640,13 +1699,13 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
           ctx.lineWidth = 2.5;
           ctx.globalAlpha = 0.65 + Math.sin(timeSec * 6) * 0.2;
           ctx.beginPath();
-          ctx.arc(heroPos.x + lungePx, heroPos.y - heroDrawH * 0.45, heroDrawW * 0.62, 0, Math.PI * 2);
+          ctx.arc(hx, hy - heroDrawH * 0.45, heroDrawW * 0.56, 0, Math.PI * 2);
           ctx.stroke();
           ctx.restore();
         }
 
         ctx.save();
-        ctx.translate(Math.round(heroPos.x + lungePx), Math.round(heroPos.y + heroBob));
+        ctx.translate(Math.round(hx), Math.round(hy + heroBob));
         ctx.scale(heroStretchX, heroStretchY);
         ctx.drawImage(
           heroSprite,
@@ -1666,6 +1725,23 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
           );
         }
         ctx.restore();
+
+        // Front-layer orbiting sparks for Champion (Tier 3+) & Mythic (Tier 4)
+        if (heroTier >= 3) {
+          ctx.save();
+          const orbCount = heroTier === 4 ? 3 : 2;
+          for (let i = 0; i < orbCount; i++) {
+            const ang = timeSec * 2.8 + (i * Math.PI * 2) / orbCount;
+            const ox = hx + Math.cos(ang) * (heroDrawW * 0.48);
+            const oy = hy - heroDrawH * 0.52 + Math.sin(ang) * 10;
+            ctx.fillStyle = i === 0 ? '#fef08a' : p.heroProjectileColor;
+            ctx.globalAlpha = 0.9;
+            ctx.fillRect(Math.round(ox - 2), Math.round(oy - 2), 5, 5);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(Math.round(ox - 1), Math.round(oy - 1), 2, 2);
+          }
+          ctx.restore();
+        }
 
         // ENEMIES RENDERING (2x EPX Sprites + Squash-and-Stretch + Safari-Safe Hit Flash)
         const sortedEnemies = [...s.enemies].sort((a, b) => a.slot - b.slot);

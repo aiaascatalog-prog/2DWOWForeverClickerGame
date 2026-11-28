@@ -1,4 +1,5 @@
 // Crisp 2D Pixel-Art Sprite Engine (pre-baked offscreen canvases for 60fps rendering)
+import { HeroEvolutionTier } from './types';
 
 export type SpritePalette = Record<string, string>;
 
@@ -143,282 +144,150 @@ function bakePixelSprite(
 }
 
 // ============================================================================
-// 6 WORLD OF WARCRAFT INSPIRED HERO CLASSES (16x16 Pixel Grids)
+// 9 HIGH-DETAIL CLASS PALETTES (30x28 Layered Pixel Art -> 60x56 2x EPX)
 // ============================================================================
 
-const HERO_GRIDS: Record<string, { grid: string[]; palette: SpritePalette }> = {
+interface HeroClassPalette {
+  armorLight: string;
+  armorMid: string;
+  armorDark: string;
+  trimGold: string;
+  trimBright: string;
+  capeMain: string;
+  capeDark: string;
+  gemCore: string;
+  gemGlow: string;
+  weaponMetal: string;
+  weaponGlow: string;
+  woodOrHilt: string;
+}
+
+const HERO_CLASS_PALETTES: Record<string, HeroClassPalette> = {
+  druid: {
+    armorLight: '#22c55e',
+    armorMid: '#15803d',
+    armorDark: '#14532d',
+    trimGold: '#f59e0b',
+    trimBright: '#fde047',
+    capeMain: '#166534',
+    capeDark: '#052e16',
+    gemCore: '#10b981',
+    gemGlow: '#a7f3d0',
+    weaponMetal: '#fbbf24',
+    weaponGlow: '#4ade80',
+    woodOrHilt: '#78350f',
+  },
   warrior: {
-    palette: {
-      O: '#0b0e14', // dark outline
-      S: '#cbd5e1', // steel light
-      M: '#64748b', // steel mid
-      D: '#334155', // steel dark
-      G: '#facc15', // Stormwind gold
-      B: '#2563eb', // Alliance blue
-      F: '#fed7aa', // skin
-      E: '#0f172a', // eyes
-      W: '#e2e8f0', // sword blade
-      H: '#92400e', // leather/hilt
-    },
-    grid: [
-      '....OOOOOO......',
-      '...OGSSSSGO.....',
-      '..OSSSSSSSSO....',
-      '..OSOOFFOOSO....',
-      '..OSFEFFEFSO....',
-      '...OFFFFFFO.....',
-      '.OOGBBBBBBGOO...',
-      'OGBSSSSSSSSBGO..',
-      'OBBSSSSSSSSBBO.O',
-      'OBBGSSSSSSGBBOOW',
-      '.OOBBGGGGGBBOOOW',
-      '..OSSMMMMMSSOHW.',
-      '..OSDDDDDDDSOHO.',
-      '..OSSO..OSSO....',
-      '..ODDO..ODDO....',
-      '..OOOO..OOOO....',
-    ],
-  },
-  hunter: {
-    palette: {
-      O: '#0b0e14',
-      C: '#15803d', // ranger cloak
-      L: '#22c55e', // bright green trim
-      D: '#14532d', // dark green
-      F: '#fde68a', // elf skin
-      E: '#38bdf8', // glowing elven eyes
-      H: '#fbbf24', // golden hair/bow trim
-      W: '#92400e', // bow wood
-      S: '#e2e8f0', // bowstring/arrow tip
-      B: '#78350f', // leather boots/chest
-    },
-    grid: [
-      '....OOOOOO......',
-      '...OCCCCCCCO....',
-      '..OCCCCCCCCLO...',
-      '..OCOOFFOOCO....',
-      '..OCFEFFEFCO.O..',
-      '...OFFFFFFO..WO.',
-      '..OOCCCCCCOO.WSO',
-      '.OCLLBBBBLLCOWSO',
-      '.OCBBBBBBBBCOHSO',
-      '.OCDDGGGGDDCOWSO',
-      '..OBBBBBBBBO.WSO',
-      '..ODDDDDDDDO.WO.',
-      '..OBBO..OBBO.O..',
-      '..OCCO..OCCO....',
-      '..ODDO..ODDO....',
-      '..OOOO..OOOO....',
-    ],
-  },
-  mage: {
-    palette: {
-      O: '#0b0e14',
-      P: '#7e22ce', // Kirin Tor violet
-      V: '#a855f7', // bright violet
-      D: '#4c1d95', // dark robe
-      G: '#facc15', // gold trim
-      F: '#fed7aa', // skin
-      E: '#38bdf8', // arcane eyes
-      C: '#67e8f9', // arcane crystal orb
-      W: '#78350f', // staff shaft
-    },
-    grid: [
-      '.....OOOO.......',
-      '....OPPPPO......',
-      '...OPPPPPPO.....',
-      '..OGGGGGGGGO..OO',
-      '..O..OFFO..O.OCC',
-      '....OFEFO....OCC',
-      '....OFFFO....OWO',
-      '...OPVVVVPO..OWO',
-      '..OPPPPPPPPO.OWO',
-      '..OPPGPPGPPO.OWO',
-      '..ODDDDDDDDO.OWO',
-      '..ODDPGGPDDO.OWO',
-      '..ODDDDDDDDO.OWO',
-      '...ODDOODDO...O.',
-      '...ODDOODDO.....',
-      '...OOOOOOOO.....',
-    ],
-  },
-  rogue: {
-    palette: {
-      O: '#0b0e14',
-      K: '#1e293b', // shadow leather
-      D: '#0f172a', // dark cloth
-      R: '#dc2626', // crimson bandana/sash
-      F: '#fed7aa', // skin
-      E: '#facc15', // sharp eyes
-      P: '#4ade80', // venom dagger glow
-      S: '#cbd5e1', // steel blade
-    },
-    grid: [
-      '....OOOOOO......',
-      '...OKKKKKKO.....',
-      '..OKKKKKKKKO....',
-      '..OKOOFFOOKO....',
-      '..OKFEFFEFKO....',
-      '...ORRRRRRO.....',
-      '..OOKKKKKKOO....',
-      '.OPSKKKKKKSPO...',
-      'OOSKKKKKKKKSOO..',
-      'O..OKRRRRKO..O..',
-      '...OKKKKKKO.....',
-      '...ODDDDDDO.....',
-      '..OKKO..OKKO....',
-      '..OKKO..OKKO....',
-      '..ODDO..ODDO....',
-      '..OOOO..OOOO....',
-    ],
+    armorLight: '#cbd5e1',
+    armorMid: '#64748b',
+    armorDark: '#334155',
+    trimGold: '#eab308',
+    trimBright: '#fef08a',
+    capeMain: '#1d4ed8',
+    capeDark: '#1e3a8a',
+    gemCore: '#38bdf8',
+    gemGlow: '#bae6fd',
+    weaponMetal: '#e2e8f0',
+    weaponGlow: '#60a5fa',
+    woodOrHilt: '#78350f',
   },
   paladin: {
-    palette: {
-      O: '#0b0e14',
-      G: '#facc15', // radiant gold plate
-      Y: '#fef08a', // bright highlight
-      W: '#f8fafc', // silver/white cloth
-      B: '#3b82f6', // Silver Hand blue
-      F: '#fed7aa', // skin
-      H: '#fbbf24', // blond hair
-      E: '#0f172a',
-      M: '#94a3b8', // hammer iron
-    },
-    grid: [
-      '....OOOOOO......',
-      '...OHHHHHHO.....',
-      '..OHHHHHHHHO....',
-      '..OHHOFFOHHO.OOO',
-      '..OHFEFFEFHOOGYG',
-      '...OFFFFFFO.OGYG',
-      'OOGGGGGGGGGGOOGO',
-      'OGYGGWWWWGGYGOOO',
-      'OGGGGWWWWGGGGOO.',
-      '.OOGGBBBBGGGOHO.',
-      '..OGGGGGGGGGOHO.',
-      '..OWWGGGGWWOOHO.',
-      '..OGGO..OGGO.O..',
-      '..OGGO..OGGO....',
-      '..OBBO..OBBO....',
-      '..OOOO..OOOO....',
-    ],
+    armorLight: '#fef08a',
+    armorMid: '#eab308',
+    armorDark: '#a16207',
+    trimGold: '#f8fafc',
+    trimBright: '#ffffff',
+    capeMain: '#2563eb',
+    capeDark: '#1e3a8a',
+    gemCore: '#38bdf8',
+    gemGlow: '#e0f2fe',
+    weaponMetal: '#facc15',
+    weaponGlow: '#fef9c3',
+    woodOrHilt: '#92400e',
+  },
+  hunter: {
+    armorLight: '#4ade80',
+    armorMid: '#15803d',
+    armorDark: '#365314',
+    trimGold: '#d97706',
+    trimBright: '#fde68a',
+    capeMain: '#14532d',
+    capeDark: '#052e16',
+    gemCore: '#22d3ee',
+    gemGlow: '#cffafe',
+    weaponMetal: '#fbbf24',
+    weaponGlow: '#86efac',
+    woodOrHilt: '#92400e',
+  },
+  rogue: {
+    armorLight: '#475569',
+    armorMid: '#1e293b',
+    armorDark: '#0f172a',
+    trimGold: '#dc2626',
+    trimBright: '#f87171',
+    capeMain: '#7f1d1d',
+    capeDark: '#450a0a',
+    gemCore: '#4ade80',
+    gemGlow: '#bbf7d0',
+    weaponMetal: '#cbd5e1',
+    weaponGlow: '#4ade80',
+    woodOrHilt: '#451a03',
+  },
+  mage: {
+    armorLight: '#a855f7',
+    armorMid: '#7e22ce',
+    armorDark: '#4c1d95',
+    trimGold: '#facc15',
+    trimBright: '#fef08a',
+    capeMain: '#581c87',
+    capeDark: '#3b0764',
+    gemCore: '#22d3ee',
+    gemGlow: '#e0f2fe',
+    weaponMetal: '#facc15',
+    weaponGlow: '#67e8f9',
+    woodOrHilt: '#6d28d9',
   },
   warlock: {
-    palette: {
-      O: '#0b0e14',
-      P: '#3b0764', // obsidian purple
-      V: '#6b21a8', // dark violet
-      F: '#4ade80', // fel green flame
-      L: '#bbf7d0', // fel core
-      H: '#71717a', // demon horns
-      R: '#e2e8f0', // skull staff
-      W: '#27272a', // dark shaft
-    },
-    grid: [
-      '.OO........OO...',
-      'OHHO.OOOO.OHHO..',
-      '.OHHOPPPPOHHO...',
-      '..OOPPPPPPOO..OF',
-      '...OPOFFOPO..OFL',
-      '...OPPPPPPO..ORR',
-      '..OPPVVVVPPO.OWO',
-      '.OPPPPPPPPPPOOWO',
-      '.OPPPFFFFPPPOOWO',
-      '..OPPPPPPPPO.OWO',
-      '..OVVVVVVVVO.OWO',
-      '..OVVPPPPVVOOOWO',
-      '..OVVVVVVVVO.OWO',
-      '...OVVOOVVO...O.',
-      '...OPPOOPPO.....',
-      '...OOOOOOOO.....',
-    ],
+    armorLight: '#9333ea',
+    armorMid: '#581c87',
+    armorDark: '#2e1065',
+    trimGold: '#71717a',
+    trimBright: '#d4d4d8',
+    capeMain: '#3b0764',
+    capeDark: '#1e1b4b',
+    gemCore: '#22c55e',
+    gemGlow: '#bbf7d0',
+    weaponMetal: '#94a3b8',
+    weaponGlow: '#4ade80',
+    woodOrHilt: '#27272a',
   },
   priest: {
-    palette: {
-      O: '#0b0e14',
-      W: '#f8fafc', // holy vestments
-      S: '#cbd5e1', // silver shadow
-      G: '#facc15', // halo & gold trim
-      Y: '#fef08a', // holy orb
-      F: '#fed7aa', // skin
-      E: '#38bdf8', // radiant eyes
-      H: '#92400e', // staff wood
-    },
-    grid: [
-      '....OGGGGO......',
-      '...OGYYYYGO.....',
-      '...OOWWWWOO.....',
-      '..OWWOFFOWWO.OO.',
-      '..OWFEFFEFWO.YYO',
-      '...OWFFFFWO..GYO',
-      '..OOGGGGGGOO.OHO',
-      '.OWWWWWWWWWWOOH.',
-      '.OWWWGGGGWWWOOH.',
-      '..OWWWWWWWWWOOH.',
-      '..OSSGGGGSSOOOH.',
-      '..OWWWWWWWWWO.O.',
-      '..OWWGGGGWWWO...',
-      '...OWWOOWWO.....',
-      '...OSSO.OSSO....',
-      '...OOOOOOOO.....',
-    ],
+    armorLight: '#ffffff',
+    armorMid: '#e2e8f0',
+    armorDark: '#94a3b8',
+    trimGold: '#facc15',
+    trimBright: '#fef9c3',
+    capeMain: '#f8fafc',
+    capeDark: '#cbd5e1',
+    gemCore: '#fbbf24',
+    gemGlow: '#fef08a',
+    weaponMetal: '#facc15',
+    weaponGlow: '#fef9c3',
+    woodOrHilt: '#b45309',
   },
   shaman: {
-    palette: {
-      O: '#0b0e14',
-      B: '#0284c7', // storm blue
-      C: '#38bdf8', // lightning cyan
-      W: '#94a3b8', // wolf headdress fur
-      L: '#78350f', // leather kilt
-      F: '#fed7aa', // skin
-      Y: '#facc15', // lightning spark
-      M: '#64748b', // storm axe
-    },
-    grid: [
-      '..OO......OO....',
-      '.OWWO.OO.OWWO...',
-      '.OWWWWWWWWWWO...',
-      '..OWOOFFOOWO..OO',
-      '..OWFEFFEFWO.OCC',
-      '...OFFFFFFO..OMC',
-      '..OOBBBBBBOO.OMO',
-      '.OWWBBBBBBWWOOMO',
-      '.OBBCCCCCCBBOMO.',
-      '..OBBBBBBBBO.O..',
-      '..OLLGGGGLLO....',
-      '..OLLLLLLLLO....',
-      '..OBBO..OBBO....',
-      '..OLLO..OLLO....',
-      '..OOOO..OOOO....',
-    ],
-  },
-  druid: {
-    palette: {
-      O: '#0b0e14',
-      A: '#d97706', // stag antlers
-      G: '#15803d', // wild emerald robes
-      L: '#4ade80', // glowing nature leaf
-      W: '#78350f', // bark & staff
-      F: '#fed7aa', // skin
-      E: '#fde047', // moon eyes
-    },
-    grid: [
-      'O..O......O..O..',
-      'OAAO.OOOO.OAAO..',
-      '.OAAOGGGGAAAO...',
-      '..OOGOFFOGOO..OO',
-      '...OGEFFEGO..OLL',
-      '...OGGGGGGO..OLL',
-      '..OOWWWWWWO..OWO',
-      '.OGGWGGGGWGGOOWO',
-      '.OGGGGGGGGGGOOWO',
-      '..OGGLLLLGGO.OWO',
-      '..OWWWWWWWWO.OWO',
-      '..OGGGGGGGGO.OWO',
-      '...OGGOOGGO...O.',
-      '...OWWOOWWO.....',
-      '...OOOOOOOO.....',
-    ],
+    armorLight: '#38bdf8',
+    armorMid: '#0369a1',
+    armorDark: '#0c4a6e',
+    trimGold: '#d97706',
+    trimBright: '#fde047',
+    capeMain: '#78350f',
+    capeDark: '#451a03',
+    gemCore: '#22d3ee',
+    gemGlow: '#e0f2fe',
+    weaponMetal: '#94a3b8',
+    weaponGlow: '#38bdf8',
+    woodOrHilt: '#78350f',
   },
 };
 
@@ -1286,115 +1155,608 @@ function mpx(matrix: (string | null)[][], x: number, y: number, color: string, w
   }
 }
 
-export function getHeroSprite(heroId: string, raceId = 'human'): HTMLCanvasElement {
-  const cacheKey = `hero_${heroId}_${raceId}`;
+function applyAutoOutline(matrix: (string | null)[][]): void {
+  const h = matrix.length;
+  const w = matrix[0]?.length ?? 0;
+  const outlinePoints: [number, number][] = [];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (matrix[y][x] !== null) continue;
+      const hasNeighbor =
+        (y > 0 && matrix[y - 1][x] !== null && matrix[y - 1][x] !== OUTLINE_HEX) ||
+        (y + 1 < h && matrix[y + 1][x] !== null && matrix[y + 1][x] !== OUTLINE_HEX) ||
+        (x > 0 && matrix[y][x - 1] !== null && matrix[y][x - 1] !== OUTLINE_HEX) ||
+        (x + 1 < w && matrix[y][x + 1] !== null && matrix[y][x + 1] !== OUTLINE_HEX);
+      if (hasNeighbor) outlinePoints.push([x, y]);
+    }
+  }
+  for (const [x, y] of outlinePoints) {
+    matrix[y][x] = OUTLINE_HEX;
+  }
+}
+
+export function getHeroSprite(
+  heroId: string,
+  raceId = 'human',
+  tier: HeroEvolutionTier = 1
+): HTMLCanvasElement {
+  const cacheKey = `hero_v2_${heroId}_${raceId}_t${tier}`;
   const cached = spriteCache.get(cacheKey);
   if (cached) return cached;
 
-  const def = HERO_GRIDS[heroId] || HERO_GRIDS.warrior;
+  const pal = HERO_CLASS_PALETTES[heroId] || HERO_CLASS_PALETTES.warrior;
   const race = RACE_VISUALS[raceId] || RACE_VISUALS.human;
 
-  const palette: SpritePalette = { ...def.palette };
-  if (heroId !== 'warlock') {
-    if (palette.F) palette.F = race.skin;
-    if (palette.E) palette.E = race.eye;
-  } else {
-    // Warlock uses V/P for cowl & F for fel flame; tint cowl highlight by race
-    palette.V = race.trim;
-  }
-  if (heroId === 'paladin' && palette.H) {
-    palette.H = race.hair;
-  }
-
-  const matrix: (string | null)[][] = Array.from({ length: 18 }, () =>
-    Array<string | null>(20).fill(null)
+  // 30x28 base matrix -> 60x56 2x EPX shaded sprite
+  const W = 30;
+  const H = 28;
+  const matrix: (string | null)[][] = Array.from({ length: H }, () =>
+    Array<string | null>(W).fill(null)
   );
-  const gridH = def.grid.length;
-  const ox = 2;
-  const oy = 18 - gridH; // anchor feet cleanly at bottom (y=17)
-  const isMage = heroId === 'mage';
-  const faceY = isMage ? oy + 5 : oy + 4;
 
-  // 1. Back-layer racial wings for Skyborne races
+  // Center of hero body (cx = 12, head x=9..15, weapon on right x=18..28)
+  const cx = 12;
+  const headY = 7;
+  const torsoY = 14;
+  const isRobeClass =
+    heroId === 'mage' || heroId === 'warlock' || heroId === 'priest' || heroId === 'druid';
+  const eyeColor = tier >= 3 ? pal.trimBright : race.eye;
+
+  // ------------------------------------------------------------------------
+  // 1. BACK LAYER: Skyborne Wings & Heroic Billowing Cape (Tier 2+)
+  // ------------------------------------------------------------------------
   if (race.feature === 'skyborne_alliance' || race.feature === 'skyborne_horde') {
-    const wingMain = race.feature === 'skyborne_alliance' ? '#f8fafc' : '#581c87';
-    const wingTip = race.feature === 'skyborne_alliance' ? '#38bdf8' : '#fb923c';
-    const outline = OUTLINE_HEX;
-    mpx(matrix, 0, oy + 4, outline, 2, 1);
-    mpx(matrix, 0, oy + 5, wingTip, 2, 2);
-    mpx(matrix, 1, oy + 6, wingMain, 2, 4);
-    mpx(matrix, 0, oy + 7, outline, 1, 3);
-    mpx(matrix, 1, oy + 10, outline, 2, 1);
-
-    mpx(matrix, 15, oy + 4, outline, 2, 1);
-    mpx(matrix, 15, oy + 5, wingTip, 2, 2);
-    mpx(matrix, 14, oy + 6, wingMain, 2, 4);
-    mpx(matrix, 16, oy + 7, outline, 1, 3);
-    mpx(matrix, 14, oy + 10, outline, 2, 1);
+    const wMain = race.feature === 'skyborne_alliance' ? '#f8fafc' : '#6b21a8';
+    const wShade = race.feature === 'skyborne_alliance' ? '#bae6fd' : '#3b0764';
+    const wTip = race.feature === 'skyborne_alliance' ? '#38bdf8' : '#fb923c';
+    const span = tier >= 3 ? 2 : 0;
+    // Left wing
+    mpx(matrix, 2 - Math.min(1, span), 10 - span, wTip, 3 + Math.min(1, span), 2);
+    mpx(matrix, 3 - Math.min(1, span), 12 - span, wMain, 4 + Math.min(1, span), 4 + span);
+    mpx(matrix, 4, 16, wShade, 4, 3);
+    // Right wing
+    mpx(matrix, 18, 10 - span, wTip, 3 + Math.min(1, span), 2);
+    mpx(matrix, 17, 12 - span, wMain, 4 + Math.min(1, span), 4 + span);
+    mpx(matrix, 16, 16, wShade, 3, 3);
   }
 
-  // 2. Draw base class sprite with racial skin & eye palette
-  for (let y = 0; y < gridH; y++) {
-    const row = def.grid[y];
-    for (let x = 0; x < row.length; x++) {
-      const ch = row[x];
-      if (ch === '.' || ch === ' ') continue;
-      const color = palette[ch];
-      if (!color) continue;
-      mpx(matrix, ox + x, oy + y, color);
+  if (tier >= 2) {
+    const capeTop = torsoY;
+    const capeLen = tier === 2 ? 7 : tier === 3 ? 10 : 11;
+    const flare = tier >= 3 ? 2 : 1;
+    for (let dy = 0; dy < capeLen; dy++) {
+      const expand = Math.floor((dy / Math.max(1, capeLen - 1)) * flare);
+      mpx(
+        matrix,
+        cx - 4 - expand,
+        capeTop + dy,
+        dy % 3 === 0 ? pal.capeDark : pal.capeMain,
+        9 + expand * 2,
+        1
+      );
+    }
+    if (tier >= 3) {
+      // Flowing cloak edge trim (like the cover Arch-Druid's emerald/gold cape)
+      mpx(matrix, cx - 4 - flare, capeTop + capeLen - 1, pal.trimGold, 9 + flare * 2, 1);
     }
   }
 
-  // 3. Warlock visible racial face inside hood
-  if (heroId === 'warlock') {
-    mpx(matrix, ox + 5, oy + 4, race.skin, 2, 1);
-    mpx(matrix, ox + 5, oy + 4, race.eye, 1, 1);
-    mpx(matrix, ox + 7, oy + 4, race.eye, 1, 1);
-    mpx(matrix, ox + 5, oy + 5, race.skinDark, 3, 1);
+  // ------------------------------------------------------------------------
+  // 2. LEGS, BOOTS, TASSETS & ROBES
+  // ------------------------------------------------------------------------
+  const legStartY = torsoY + 6; // y = 20
+  if (isRobeClass && tier >= 2) {
+    // Layered battle-robe + center split showing boots at bottom
+    mpx(matrix, cx - 3, legStartY, pal.armorDark, 7, 3);
+    mpx(matrix, cx - 2, legStartY, pal.armorMid, 5, 3);
+    mpx(matrix, cx, legStartY, pal.trimGold, 1, 3);
+    // Boots peeking below robe
+    mpx(matrix, cx - 3, legStartY + 3, pal.woodOrHilt, 2, 2);
+    mpx(matrix, cx + 2, legStartY + 3, pal.woodOrHilt, 2, 2);
+    mpx(matrix, cx - 3, legStartY + 4, pal.armorDark, 2, 1);
+    mpx(matrix, cx + 2, legStartY + 4, pal.armorDark, 2, 1);
+  } else {
+    // Pants + sturdy cuffed fantasy boots (matches cover Druid)
+    mpx(matrix, cx - 3, legStartY, pal.armorDark, 2, 2);
+    mpx(matrix, cx + 2, legStartY, pal.armorDark, 2, 2);
+    // Knee plates / cuffs (Tier 2+)
+    mpx(
+      matrix,
+      cx - 3,
+      legStartY + 2,
+      tier >= 2 ? pal.trimGold : pal.woodOrHilt,
+      2,
+      1
+    );
+    mpx(
+      matrix,
+      cx + 2,
+      legStartY + 2,
+      tier >= 2 ? pal.trimGold : pal.woodOrHilt,
+      2,
+      1
+    );
+    // Boots
+    mpx(matrix, cx - 3, legStartY + 3, pal.woodOrHilt, 2, 2);
+    mpx(matrix, cx + 2, legStartY + 3, pal.woodOrHilt, 2, 2);
+    if (tier >= 3) {
+      mpx(matrix, cx - 4, legStartY + 4, pal.armorDark, 3, 1);
+      mpx(matrix, cx + 2, legStartY + 4, pal.armorDark, 3, 1);
+    }
   }
 
-  // 4. Foreground racial silhouette features (ears, horns, beard, tusks, mohawk, goggles)
-  if (race.feature === 'dwarf') {
-    mpx(matrix, ox + 4, faceY + 1, race.hair, 5, 2);
-    mpx(matrix, ox + 5, faceY + 3, race.hair, 3, 1);
-    mpx(matrix, ox + 6, faceY + 2, '#fbbf24', 1, 1);
-  } else if (race.feature === 'night_elf') {
-    mpx(matrix, ox + 1, faceY - 1, OUTLINE_HEX, 2, 1);
-    mpx(matrix, ox + 1, faceY, race.skin, 2, 1);
-    mpx(matrix, ox + 10, faceY - 1, OUTLINE_HEX, 2, 1);
-    mpx(matrix, ox + 10, faceY, race.skin, 2, 1);
-    mpx(matrix, ox + 5, faceY - 2, race.hair, 3, 1);
+  // ------------------------------------------------------------------------
+  // 3. TORSO, CHESTPLATE, BELT & HEROIC GEM CLASP
+  // ------------------------------------------------------------------------
+  mpx(matrix, cx - 3, torsoY, pal.armorMid, 7, 6);
+  mpx(matrix, cx - 2, torsoY + 1, pal.armorLight, 5, 3);
+  // Shaded torso sides
+  mpx(matrix, cx - 3, torsoY + 1, pal.armorDark, 1, 4);
+  mpx(matrix, cx + 3, torsoY + 1, pal.armorDark, 1, 4);
+
+  // Class chest emblem / leather straps
+  if (tier === 1) {
+    mpx(matrix, cx - 1, torsoY + 1, pal.woodOrHilt, 3, 2);
+    mpx(matrix, cx, torsoY + 1, pal.gemCore, 1, 1);
+  } else {
+    // Gold/metal chest trim & radiant chest crystal
+    mpx(matrix, cx - 2, torsoY, pal.trimGold, 5, 1);
+    mpx(matrix, cx - 1, torsoY + 1, pal.trimGold, 3, 2);
+    mpx(matrix, cx, torsoY + 1, pal.gemCore, 1, 2);
+    mpx(matrix, cx, torsoY + 1, pal.gemGlow, 1, 1);
+    if (tier >= 3) {
+      // Tabard/tasset front drape
+      mpx(matrix, cx - 1, torsoY + 5, pal.armorMid, 3, 3);
+      mpx(matrix, cx, torsoY + 6, pal.trimBright, 1, 2);
+    }
+  }
+
+  // Belt & Buckle (y = torsoY + 4 = 18)
+  mpx(matrix, cx - 3, torsoY + 4, pal.woodOrHilt, 7, 1);
+  mpx(matrix, cx - 1, torsoY + 4, tier >= 2 ? pal.trimGold : '#cbd5e1', 3, 1);
+  if (tier >= 2) {
+    mpx(matrix, cx, torsoY + 4, pal.gemGlow, 1, 1);
+  }
+
+  // Gauntlets / Hands
+  mpx(matrix, cx - 5, torsoY + 2, tier >= 2 ? pal.armorMid : race.skin, 2, 2);
+  mpx(matrix, cx + 4, torsoY + 2, tier >= 2 ? pal.armorMid : race.skin, 2, 2);
+  if (tier >= 3) {
+    mpx(matrix, cx - 5, torsoY + 2, pal.trimGold, 2, 1);
+    mpx(matrix, cx + 4, torsoY + 2, pal.trimGold, 2, 1);
+  }
+
+  // ------------------------------------------------------------------------
+  // 4. SHOULDER PAULDRONS (Evolves dramatically Tier 1 -> Tier 4!)
+  // ------------------------------------------------------------------------
+  if (tier === 1) {
+    // Light novice leafy/cloth shoulders
+    mpx(matrix, cx - 4, torsoY, pal.armorLight, 2, 2);
+    mpx(matrix, cx + 3, torsoY, pal.armorLight, 2, 2);
+  } else if (tier === 2) {
+    // Layered veteran pauldrons with trim
+    mpx(matrix, cx - 5, torsoY - 1, pal.armorMid, 3, 3);
+    mpx(matrix, cx - 5, torsoY - 1, pal.trimGold, 3, 1);
+    mpx(matrix, cx + 3, torsoY - 1, pal.armorMid, 3, 3);
+    mpx(matrix, cx + 3, torsoY - 1, pal.trimGold, 3, 1);
+  } else {
+    // Tier 3 & 4: Grand sculpted spiked/feathered pauldrons with glowing orbs!
+    // Left pauldron
+    mpx(matrix, cx - 6, torsoY - 1, pal.armorDark, 4, 3);
+    mpx(matrix, cx - 6, torsoY - 2, pal.armorLight, 3, 2);
+    mpx(matrix, cx - 7, torsoY - 2, pal.trimGold, 2, 2); // outer horn/spike
+    mpx(matrix, cx - 6, torsoY - 3, pal.trimBright, 1, 1);
+    mpx(matrix, cx - 4, torsoY, pal.gemCore, 2, 1);
+    mpx(matrix, cx - 4, torsoY - 1, pal.gemGlow, 1, 1);
+
+    // Right pauldron
+    mpx(matrix, cx + 3, torsoY - 1, pal.armorDark, 4, 3);
+    mpx(matrix, cx + 4, torsoY - 2, pal.armorLight, 3, 2);
+    mpx(matrix, cx + 6, torsoY - 2, pal.trimGold, 2, 2); // outer horn/spike
+    mpx(matrix, cx + 7, torsoY - 3, pal.trimBright, 1, 1);
+    mpx(matrix, cx + 3, torsoY, pal.gemCore, 2, 1);
+    mpx(matrix, cx + 4, torsoY - 1, pal.gemGlow, 1, 1);
+
+    if (tier === 4) {
+      // Mythic blazing shoulder tips
+      mpx(matrix, cx - 7, torsoY - 4, pal.weaponGlow, 1, 2);
+      mpx(matrix, cx + 7, torsoY - 4, pal.weaponGlow, 1, 2);
+    }
+  }
+
+  // ------------------------------------------------------------------------
+  // 5. EXPRESSIVE HEAD, FACE & RACIAL SILHOUETTE
+  // ------------------------------------------------------------------------
+  // Head block (x = 9..15, y = 7..12)
+  mpx(matrix, cx - 3, headY, race.skinDark, 7, 6);
+  mpx(matrix, cx - 2, headY + 1, race.skin, 5, 4);
+  // Subtle brow & eyes (x = 10..14)
+  mpx(matrix, cx - 2, headY + 2, race.hair, 2, 1);
+  mpx(matrix, cx + 1, headY + 2, race.hair, 2, 1);
+  // Crisp RPG eyes (glowing in Tier 3-4)
+  mpx(matrix, cx - 2, headY + 3, eyeColor, 1, 1);
+  mpx(matrix, cx + 2, headY + 3, eyeColor, 1, 1);
+  if (tier >= 3) {
+    mpx(matrix, cx - 1, headY + 3, '#ffffff', 1, 1);
+    mpx(matrix, cx + 1, headY + 3, '#ffffff', 1, 1);
+  } else {
+    mpx(matrix, cx - 1, headY + 3, '#f8fafc', 1, 1);
+    mpx(matrix, cx + 1, headY + 3, '#f8fafc', 1, 1);
+  }
+  // Hair framing face (like cover Novice Druid's bangs/locks)
+  mpx(matrix, cx - 3, headY + 1, race.hair, 1, 4);
+  mpx(matrix, cx + 3, headY + 1, race.hair, 1, 4);
+
+  // Racial facial overlays (always legible across classes)
+  if (race.feature === 'night_elf') {
+    // Long pointed elven ears sweeping diagonally up-out (exact cover Druid look!)
+    mpx(matrix, cx - 5, headY + 2, race.skin, 2, 1);
+    mpx(matrix, cx - 6, headY + 1, race.skinDark, 2, 1);
+    mpx(matrix, cx + 4, headY + 2, race.skin, 2, 1);
+    mpx(matrix, cx + 5, headY + 1, race.skinDark, 2, 1);
+  } else if (race.feature === 'dwarf') {
+    // Braided beard + golden clasp
+    mpx(matrix, cx - 2, headY + 5, race.hair, 5, 2);
+    mpx(matrix, cx - 1, headY + 7, race.hair, 3, 1);
+    mpx(matrix, cx, headY + 6, '#facc15', 1, 1);
   } else if (race.feature === 'gnome') {
-    mpx(matrix, ox + 4, faceY - 2, race.hair, 5, 1);
-    mpx(matrix, ox + 4, faceY - 1, '#38bdf8', 2, 1);
-    mpx(matrix, ox + 7, faceY - 1, '#38bdf8', 2, 1);
-    mpx(matrix, ox + 6, faceY - 1, '#facc15', 1, 1);
+    // Glowing cyan engineer goggles on forehead
+    mpx(matrix, cx - 2, headY + 1, '#38bdf8', 2, 1);
+    mpx(matrix, cx + 1, headY + 1, '#38bdf8', 2, 1);
+    mpx(matrix, cx, headY + 1, '#facc15', 1, 1);
   } else if (race.feature === 'orc') {
-    mpx(matrix, ox + 4, faceY + 1, '#f8fafc', 1, 1);
-    mpx(matrix, ox + 8, faceY + 1, '#f8fafc', 1, 1);
-    mpx(matrix, ox + 2, oy + 7, '#dc2626', 2, 2);
+    // Upward ivory tusks + crimson shoulder mark
+    mpx(matrix, cx - 2, headY + 5, '#f8fafc', 1, 1);
+    mpx(matrix, cx + 2, headY + 5, '#f8fafc', 1, 1);
+    mpx(matrix, cx - 2, headY + 4, race.skinDark, 5, 1);
   } else if (race.feature === 'undead') {
-    mpx(matrix, ox + 5, faceY + 1, '#cbd5e1', 3, 1);
-    mpx(matrix, ox + 4, faceY, race.eye, 1, 1);
-    mpx(matrix, ox + 8, faceY, race.eye, 1, 1);
-    mpx(matrix, ox + 6, oy + 8, '#cbd5e1', 2, 1);
+    // Hollow pale jaw + glowing eye sockets
+    mpx(matrix, cx - 2, headY + 5, '#cbd5e1', 5, 1);
+    mpx(matrix, cx - 2, headY + 3, race.eye, 1, 1);
+    mpx(matrix, cx + 2, headY + 3, race.eye, 1, 1);
   } else if (race.feature === 'tauren') {
-    mpx(matrix, ox + 1, oy + 1, '#f8fafc', 1, 2);
-    mpx(matrix, ox + 2, oy + 2, '#e2e8f0', 2, 1);
-    mpx(matrix, ox + 11, oy + 1, '#f8fafc', 1, 2);
-    mpx(matrix, ox + 9, oy + 2, '#e2e8f0', 2, 1);
-    mpx(matrix, ox + 5, faceY + 1, '#451a03', 3, 1);
+    // Snout + broad curving ivory bull horns
+    mpx(matrix, cx - 1, headY + 5, '#451a03', 3, 1);
+    mpx(matrix, cx - 6, headY + 1, '#e2e8f0', 3, 1);
+    mpx(matrix, cx - 7, headY - 1, '#f8fafc', 1, 2);
+    mpx(matrix, cx + 4, headY + 1, '#e2e8f0', 3, 1);
+    mpx(matrix, cx + 7, headY - 1, '#f8fafc', 1, 2);
   } else if (race.feature === 'troll') {
-    mpx(matrix, ox + 5, Math.max(0, oy - 1), race.hair, 3, 2);
-    mpx(matrix, ox + 6, Math.max(0, oy - 2), '#fb923c', 1, 1);
-    mpx(matrix, ox + 1, faceY, race.skin, 2, 1);
-    mpx(matrix, ox + 10, faceY, race.skin, 2, 1);
-    mpx(matrix, ox + 4, faceY + 1, '#f8fafc', 1, 1);
-    mpx(matrix, ox + 8, faceY + 1, '#f8fafc', 1, 1);
-  } else if (race.feature === 'human') {
-    mpx(matrix, ox + 6, oy + 1, '#facc15', 2, 1);
+    // Pointed ears + tusks + tall fiery mohawk
+    mpx(matrix, cx - 5, headY + 2, race.skin, 2, 1);
+    mpx(matrix, cx + 4, headY + 2, race.skin, 2, 1);
+    mpx(matrix, cx - 2, headY + 5, '#f8fafc', 1, 1);
+    mpx(matrix, cx + 2, headY + 5, '#f8fafc', 1, 1);
+    mpx(matrix, cx - 1, headY - 3, race.hair, 3, 3);
+    mpx(matrix, cx, headY - 5, '#fb923c', 1, 2);
   }
 
+  // ------------------------------------------------------------------------
+  // 6. CLASS HEADGEAR / CROWN / ANTLERS / HELM (Evolves Tier 1 -> 4!)
+  // ------------------------------------------------------------------------
+  if (heroId === 'druid') {
+    if (tier === 1) {
+      // Novice Hood + forehead emerald gem (faithful to left cover Druid!)
+      mpx(matrix, cx - 3, headY - 1, pal.armorMid, 7, 2);
+      mpx(matrix, cx - 2, headY - 2, pal.armorLight, 5, 1);
+      mpx(matrix, cx - 1, headY - 3, pal.armorMid, 3, 1);
+      mpx(matrix, cx, headY + 1, pal.gemGlow, 1, 1);
+    } else if (tier === 2) {
+      // Bark crown hood + budding stag antlers
+      mpx(matrix, cx - 3, headY - 1, pal.armorMid, 7, 2);
+      mpx(matrix, cx - 2, headY - 2, pal.trimGold, 5, 1);
+      mpx(matrix, cx, headY, pal.gemGlow, 1, 2);
+      // Budding antlers
+      mpx(matrix, cx - 5, headY - 3, '#b45309', 2, 2);
+      mpx(matrix, cx - 6, headY - 4, '#d97706', 1, 2);
+      mpx(matrix, cx + 4, headY - 3, '#b45309', 2, 2);
+      mpx(matrix, cx + 6, headY - 4, '#d97706', 1, 2);
+    } else {
+      // Tier 3 & 4: Grand Arch-Druid Golden Crescent Helm + Giant Branching Stag Antlers!
+      mpx(matrix, cx - 3, headY - 1, pal.armorMid, 7, 2);
+      mpx(matrix, cx - 2, headY - 2, pal.trimGold, 5, 2);
+      mpx(matrix, cx, headY - 1, pal.gemGlow, 1, 2);
+      // Golden Crescent Moon Horns flanking brow
+      mpx(matrix, cx - 3, headY - 4, pal.trimBright, 1, 3);
+      mpx(matrix, cx + 3, headY - 4, pal.trimBright, 1, 3);
+      // Massive multi-branched stag antlers
+      mpx(matrix, cx - 5, headY - 2, '#92400e', 2, 1);
+      mpx(matrix, cx - 7, headY - 4, '#b45309', 2, 2);
+      mpx(matrix, cx - 8, headY - 6, '#d97706', 2, 2);
+      mpx(matrix, cx - 5, headY - 5, '#d97706', 1, 2);
+      mpx(matrix, cx + 4, headY - 2, '#92400e', 2, 1);
+      mpx(matrix, cx + 6, headY - 4, '#b45309', 2, 2);
+      mpx(matrix, cx + 7, headY - 6, '#d97706', 2, 2);
+      mpx(matrix, cx + 5, headY - 5, '#d97706', 1, 2);
+      if (tier === 4) {
+        mpx(matrix, cx - 9, headY - 7, pal.trimBright, 1, 2);
+        mpx(matrix, cx + 9, headY - 7, pal.trimBright, 1, 2);
+        mpx(matrix, cx, headY - 5, pal.gemGlow, 1, 1);
+      }
+    }
+  } else if (heroId === 'warrior') {
+    mpx(matrix, cx - 3, headY - 1, pal.armorMid, 7, 2);
+    mpx(matrix, cx - 2, headY - 2, pal.armorLight, 5, 1);
+    mpx(matrix, cx, headY, pal.trimGold, 1, 2);
+    if (tier >= 2) {
+      // Helm wings / horns
+      mpx(matrix, cx - 5, headY - 2, pal.trimGold, 2, 2);
+      mpx(matrix, cx + 4, headY - 2, pal.trimGold, 2, 2);
+    }
+    if (tier >= 3) {
+      mpx(matrix, cx - 1, headY - 4, pal.trimBright, 3, 2);
+      mpx(matrix, cx - 6, headY - 4, pal.armorLight, 1, 3);
+      mpx(matrix, cx + 6, headY - 4, pal.armorLight, 1, 3);
+    }
+    if (tier === 4) {
+      mpx(matrix, cx - 7, headY - 6, pal.trimBright, 1, 2);
+      mpx(matrix, cx + 7, headY - 6, pal.trimBright, 1, 2);
+    }
+  } else if (heroId === 'paladin') {
+    if (tier === 1) {
+      mpx(matrix, cx - 3, headY - 1, race.hair, 7, 2);
+      mpx(matrix, cx - 2, headY, pal.armorMid, 5, 1);
+    } else {
+      mpx(matrix, cx - 3, headY - 1, pal.armorMid, 7, 2);
+      mpx(matrix, cx - 2, headY - 2, pal.armorLight, 5, 1);
+      mpx(matrix, cx, headY, pal.gemCore, 1, 2);
+      mpx(matrix, cx - 5, headY - 3, '#f8fafc', 2, 2);
+      mpx(matrix, cx + 4, headY - 3, '#f8fafc', 2, 2);
+    }
+    if (tier >= 3) {
+      // Floating radiant golden halo
+      mpx(matrix, cx - 3, headY - 5, pal.trimBright, 7, 1);
+      mpx(matrix, cx - 4, headY - 4, pal.armorMid, 1, 1);
+      mpx(matrix, cx + 4, headY - 4, pal.armorMid, 1, 1);
+    }
+    if (tier === 4) {
+      mpx(matrix, cx - 6, headY - 5, pal.trimBright, 2, 2);
+      mpx(matrix, cx + 5, headY - 5, pal.trimBright, 2, 2);
+    }
+  } else if (heroId === 'hunter') {
+    mpx(matrix, cx - 3, headY - 1, pal.armorMid, 7, 2);
+    mpx(matrix, cx - 2, headY - 2, pal.armorLight, 5, 1);
+    if (tier >= 2) {
+      mpx(matrix, cx - 4, headY - 3, pal.trimGold, 2, 2);
+    }
+    if (tier >= 3) {
+      mpx(matrix, cx - 5, headY - 4, pal.trimBright, 2, 2);
+      mpx(matrix, cx + 4, headY - 4, pal.trimBright, 2, 2);
+      mpx(matrix, cx, headY, pal.gemGlow, 1, 1);
+    }
+    if (tier === 4) {
+      mpx(matrix, cx - 6, headY - 6, pal.weaponGlow, 1, 2);
+      mpx(matrix, cx + 6, headY - 6, pal.weaponGlow, 1, 2);
+    }
+  } else if (heroId === 'rogue') {
+    mpx(matrix, cx - 3, headY - 1, pal.armorMid, 7, 2);
+    mpx(matrix, cx - 2, headY - 2, pal.armorDark, 5, 1);
+    // Crimson assassin face mask
+    mpx(matrix, cx - 2, headY + 4, pal.trimGold, 5, 2);
+    if (tier >= 2) {
+      // Trailing crimson scarf on left
+      mpx(matrix, cx - 5, headY + 4, pal.trimGold, 2, 2);
+      mpx(matrix, cx - 6, headY + 5, pal.trimBright, 1, 2);
+    }
+    if (tier >= 3) {
+      // Bloodfang horns
+      mpx(matrix, cx - 4, headY - 4, pal.trimGold, 1, 3);
+      mpx(matrix, cx + 4, headY - 4, pal.trimGold, 1, 3);
+      mpx(matrix, cx, headY, pal.gemCore, 1, 1);
+    }
+    if (tier === 4) {
+      mpx(matrix, cx - 5, headY - 5, pal.gemGlow, 1, 2);
+      mpx(matrix, cx + 5, headY - 5, pal.gemGlow, 1, 2);
+    }
+  } else if (heroId === 'mage') {
+    // Iconic pointed Kirin Tor mage hat
+    mpx(matrix, cx - 4, headY, pal.trimGold, 9, 1);
+    mpx(matrix, cx - 3, headY - 2, pal.armorMid, 7, 2);
+    mpx(matrix, cx - 2, headY - 4, pal.armorLight, 5, 2);
+    mpx(matrix, cx - 1, headY - 5, pal.armorMid, 3, 1);
+    if (tier >= 2) {
+      mpx(matrix, cx, headY - 1, pal.gemGlow, 1, 1);
+    }
+    if (tier >= 3) {
+      mpx(matrix, cx - 5, headY - 2, pal.trimBright, 1, 2);
+      mpx(matrix, cx + 5, headY - 2, pal.trimBright, 1, 2);
+    }
+    if (tier === 4) {
+      mpx(matrix, cx, headY - 7, pal.gemGlow, 2, 2);
+    }
+  } else if (heroId === 'warlock') {
+    mpx(matrix, cx - 3, headY - 1, pal.armorDark, 7, 2);
+    mpx(matrix, cx - 2, headY - 2, pal.armorMid, 5, 1);
+    if (tier >= 2) {
+      mpx(matrix, cx - 5, headY - 3, pal.trimGold, 2, 2);
+      mpx(matrix, cx + 4, headY - 3, pal.trimGold, 2, 2);
+    }
+    if (tier >= 3) {
+      // Sweeping Dreadlord Horns + Fel brow jewel
+      mpx(matrix, cx - 6, headY - 5, pal.trimBright, 2, 3);
+      mpx(matrix, cx + 5, headY - 5, pal.trimBright, 2, 3);
+      mpx(matrix, cx, headY, pal.gemGlow, 1, 1);
+    }
+    if (tier === 4) {
+      mpx(matrix, cx - 7, headY - 7, pal.weaponGlow, 1, 2);
+      mpx(matrix, cx + 7, headY - 7, pal.weaponGlow, 1, 2);
+    }
+  } else if (heroId === 'priest') {
+    mpx(matrix, cx - 3, headY - 1, pal.armorLight, 7, 2);
+    mpx(matrix, cx - 2, headY - 2, pal.trimGold, 5, 1);
+    if (tier >= 2) {
+      mpx(matrix, cx - 3, headY - 4, pal.trimBright, 7, 1);
+    }
+    if (tier >= 3) {
+      mpx(matrix, cx - 5, headY - 3, '#ffffff', 2, 2);
+      mpx(matrix, cx + 4, headY - 3, '#ffffff', 2, 2);
+      mpx(matrix, cx, headY - 5, pal.gemGlow, 1, 1);
+    }
+    if (tier === 4) {
+      mpx(matrix, cx - 2, headY - 6, pal.trimBright, 5, 1);
+    }
+  } else if (heroId === 'shaman') {
+    // Wolf-pelt spirit headdress
+    mpx(matrix, cx - 3, headY - 1, '#94a3b8', 7, 2);
+    mpx(matrix, cx - 2, headY - 2, '#cbd5e1', 5, 1);
+    if (tier >= 2) {
+      // Wolf ears + glowing storm trim
+      mpx(matrix, cx - 4, headY - 3, '#64748b', 2, 2);
+      mpx(matrix, cx + 3, headY - 3, '#64748b', 2, 2);
+      mpx(matrix, cx, headY - 1, pal.gemGlow, 1, 1);
+    }
+    if (tier >= 3) {
+      mpx(matrix, cx - 5, headY - 4, pal.weaponGlow, 1, 2);
+      mpx(matrix, cx + 5, headY - 4, pal.weaponGlow, 1, 2);
+    }
+    if (tier === 4) {
+      mpx(matrix, cx - 6, headY - 6, pal.trimBright, 1, 2);
+      mpx(matrix, cx + 6, headY - 6, pal.trimBright, 1, 2);
+    }
+  }
+
+  // ------------------------------------------------------------------------
+  // 7. TIERED CLASS WEAPONS (x = 19..28) — Evolves dramatically Tier 1 -> 4!
+  // ------------------------------------------------------------------------
+  const wx = 21;
+  if (heroId === 'druid') {
+    // Shaft
+    mpx(matrix, wx, 9, pal.woodOrHilt, 1, 16);
+    if (tier === 1) {
+      // Novice wooden branch twig with 2 cute leaves (matches left cover Druid!)
+      mpx(matrix, wx - 1, 7, pal.woodOrHilt, 2, 3);
+      mpx(matrix, wx + 1, 6, pal.armorLight, 2, 2);
+      mpx(matrix, wx - 2, 8, pal.armorLight, 1, 1);
+    } else if (tier === 2) {
+      // Leaf-wrapped emerald gem staff
+      mpx(matrix, wx - 1, 7, pal.armorMid, 3, 2);
+      mpx(matrix, wx, 5, pal.gemCore, 2, 3);
+      mpx(matrix, wx, 6, pal.gemGlow, 1, 1);
+    } else {
+      // Tier 3 & 4: Golden Crescent Moon Staff cradling glowing Emerald Diamond!
+      mpx(matrix, wx - 1, 10, pal.trimGold, 3, 1);
+      mpx(matrix, wx + 1, 4, pal.trimGold, 2, 1);
+      mpx(matrix, wx - 1, 5, pal.trimGold, 2, 1);
+      mpx(matrix, wx - 2, 6, pal.trimGold, 1, 3);
+      mpx(matrix, wx - 1, 9, pal.trimGold, 2, 1);
+      mpx(matrix, wx + 1, 9, pal.trimBright, 2, 1);
+      // Glowing emerald diamond core inside crescent
+      mpx(matrix, wx + 1, 6, pal.gemCore, 2, 2);
+      mpx(matrix, wx + 1, 6, pal.gemGlow, 1, 1);
+      if (tier === 4) {
+        // Golden fire / nature aura around crescent moon staff (exact cover Arch-Druid!)
+        mpx(matrix, wx - 3, 5, '#fb923c', 1, 2);
+        mpx(matrix, wx + 3, 4, '#fde047', 1, 2);
+        mpx(matrix, wx + 4, 7, '#fb923c', 1, 2);
+      }
+    }
+  } else if (heroId === 'warrior') {
+    mpx(matrix, wx, 18, pal.woodOrHilt, 1, 4);
+    mpx(matrix, wx - 2, 17, pal.trimGold, 5, 1);
+    const bladeTop = tier === 1 ? 10 : tier === 2 ? 7 : 4;
+    const bladeW = tier >= 3 ? 2 : 1;
+    mpx(matrix, wx, bladeTop, pal.weaponMetal, bladeW, 17 - bladeTop);
+    if (tier >= 2) {
+      mpx(matrix, wx, bladeTop + 2, pal.weaponGlow, 1, 5);
+    }
+    if (tier === 4) {
+      mpx(matrix, wx - 1, bladeTop + 1, pal.trimBright, 1, 3);
+      mpx(matrix, wx + 2, bladeTop + 2, pal.weaponGlow, 1, 4);
+    }
+  } else if (heroId === 'paladin') {
+    mpx(matrix, wx, 9, pal.woodOrHilt, 1, 15);
+    const hTop = tier === 1 ? 7 : 5;
+    mpx(matrix, wx - 2, hTop, pal.armorMid, 5, 4);
+    mpx(matrix, wx - 1, hTop + 1, pal.trimBright, 3, 2);
+    if (tier >= 3) {
+      mpx(matrix, wx - 3, hTop, pal.gemCore, 1, 4);
+      mpx(matrix, wx + 3, hTop, pal.gemCore, 1, 4);
+      mpx(matrix, wx, hTop - 2, pal.trimBright, 1, 2);
+    }
+    if (tier === 4) {
+      mpx(matrix, wx - 4, hTop + 1, pal.weaponGlow, 1, 2);
+      mpx(matrix, wx + 4, hTop + 1, pal.weaponGlow, 1, 2);
+    }
+  } else if (heroId === 'hunter') {
+    const bowH = tier >= 3 ? 13 : 10;
+    const bTop = 14 - Math.floor(bowH / 2);
+    // Bowstring
+    mpx(matrix, wx - 1, bTop + 1, '#e2e8f0', 1, bowH - 2);
+    // Curved bow limbs
+    mpx(matrix, wx, bTop, pal.woodOrHilt, 2, 2);
+    mpx(matrix, wx + 1, bTop + 2, tier >= 2 ? pal.trimGold : pal.woodOrHilt, 1, bowH - 4);
+    mpx(matrix, wx, bTop + bowH - 2, pal.woodOrHilt, 2, 2);
+    // Nocked glowing arrow
+    mpx(matrix, wx - 2, 14, tier >= 2 ? pal.weaponGlow : '#cbd5e1', 5, 1);
+    if (tier >= 3) {
+      mpx(matrix, wx + 3, 13, pal.trimBright, 1, 3);
+    }
+  } else if (heroId === 'rogue') {
+    // Dual wield blades (left off-hand + right main-hand!)
+    const bladeLen = tier === 1 ? 4 : tier === 2 ? 6 : 8;
+    // Left off-hand blade pointing down-left
+    mpx(matrix, 5, 16, pal.weaponMetal, 2, 1);
+    mpx(matrix, 4 - (tier >= 3 ? 1 : 0), 17, tier >= 2 ? pal.weaponGlow : pal.weaponMetal, 2, bladeLen - 2);
+    // Right main-hand blade
+    mpx(matrix, wx - 1, 16, pal.trimGold, 3, 1);
+    mpx(matrix, wx, 16 - bladeLen, pal.weaponMetal, tier >= 3 ? 2 : 1, bladeLen);
+    if (tier >= 2) {
+      mpx(matrix, wx + 1, 16 - bladeLen, pal.weaponGlow, 1, bladeLen - 2);
+    }
+  } else if (heroId === 'mage') {
+    mpx(matrix, wx, 10, pal.woodOrHilt, 1, 15);
+    mpx(matrix, wx - 1, 8, pal.trimGold, 3, 2);
+    mpx(matrix, wx - 1, 5, pal.gemCore, 3, 3);
+    mpx(matrix, wx, 6, '#ffffff', 1, 1);
+    if (tier >= 3) {
+      mpx(matrix, wx - 2, 4, pal.trimBright, 1, 3);
+      mpx(matrix, wx + 2, 4, pal.trimBright, 1, 3);
+    }
+    if (tier === 4) {
+      mpx(matrix, wx, 2, pal.weaponGlow, 1, 2);
+    }
+  } else if (heroId === 'warlock') {
+    mpx(matrix, wx, 10, pal.woodOrHilt, 1, 15);
+    // Skull topper
+    mpx(matrix, wx - 1, 7, '#e2e8f0', 3, 3);
+    mpx(matrix, wx, 8, pal.weaponGlow, 1, 1);
+    if (tier >= 2) {
+      mpx(matrix, wx - 2, 6, pal.trimGold, 1, 2);
+      mpx(matrix, wx + 2, 6, pal.trimGold, 1, 2);
+    }
+    if (tier >= 3) {
+      // Fel flame crowning the skull staff
+      mpx(matrix, wx - 1, 4, pal.weaponGlow, 3, 3);
+      mpx(matrix, wx, 3, pal.gemGlow, 1, 2);
+    }
+    if (tier === 4) {
+      mpx(matrix, wx + 2, 4, pal.gemGlow, 1, 2);
+    }
+  } else if (heroId === 'priest') {
+    mpx(matrix, wx, 9, pal.woodOrHilt, 1, 16);
+    mpx(matrix, wx - 1, 7, pal.trimGold, 3, 2);
+    mpx(matrix, wx, 5, pal.gemGlow, 2, 2);
+    if (tier >= 3) {
+      // Angelic Benediction wings on staff
+      mpx(matrix, wx - 2, 5, '#ffffff', 1, 3);
+      mpx(matrix, wx + 2, 5, '#ffffff', 1, 3);
+      mpx(matrix, wx, 3, pal.trimBright, 1, 2);
+    }
+  } else if (heroId === 'shaman') {
+    mpx(matrix, wx, 9, pal.woodOrHilt, 1, 16);
+    const axeH = tier >= 3 ? 6 : 4;
+    mpx(matrix, wx + 1, 8, pal.weaponMetal, 3, axeH);
+    mpx(matrix, wx + 3, 8, tier >= 2 ? pal.weaponGlow : '#e2e8f0', 1, axeH);
+    if (tier >= 3) {
+      mpx(matrix, wx - 2, 9, pal.weaponGlow, 2, 3);
+      mpx(matrix, wx + 2, 6, pal.trimBright, 1, 2);
+    }
+  }
+
+  // ------------------------------------------------------------------------
+  // 8. AUTO-OUTLINE & 2x EPX SHADING BAKE
+  // ------------------------------------------------------------------------
+  applyAutoOutline(matrix);
   const canvas = upscaleAndShadeMatrix(matrix);
   spriteCache.set(cacheKey, canvas);
   return canvas;

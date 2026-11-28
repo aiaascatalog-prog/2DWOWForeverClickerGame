@@ -9,6 +9,7 @@ import {
   RotateCcw,
   Shield,
   Sparkles,
+  Trophy,
   Volume2,
   VolumeX,
   Zap,
@@ -23,6 +24,7 @@ import {
   EMBLEM_DMG_BONUS,
   EMBLEM_GOLD_BONUS,
   HEROES,
+  HERO_TIER_LABELS,
   LOCALE_STORAGE_KEY,
   MONSTERS_PER_FLOOR,
   QUESTS,
@@ -33,6 +35,7 @@ import {
   UI_COPY,
   UPGRADES,
   calculatePendingEmblems,
+  computeLeaderboardScore,
   detectDefaultLocale,
   formatNumber,
   getArenaLayout,
@@ -42,6 +45,7 @@ import {
   getClassSkillLevel,
   getClassSwitchCost,
   getClassUnlockCost,
+  getHeroEvolutionTier,
   getHeroRank,
   getHeroUpgradeCost,
   getRaceById,
@@ -63,7 +67,8 @@ import {
   SaveState,
   SkillId,
 } from './game/types';
-import { platformSDK } from './sdk/crazygames';
+import { platformSDK } from './sdk/platform';
+import { LeaderboardFetchResult, PortalPlayerInfo, ScoreRunMeta } from './sdk/types';
 
 const DEFAULT_HERO_RANKS: Record<HeroId, number> = {
   warrior: 1,
@@ -237,6 +242,12 @@ export default function App() {
   });
   const [bossSecondsLeft, setBossSecondsLeft] = useState<number | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [leaderboardData, setLeaderboardData] = useState<LeaderboardFetchResult | null>(null);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [portalPlayer, setPortalPlayer] = useState<PortalPlayerInfo | null>(() =>
+    platformSDK.getPlayer()
+  );
   const [adModal, setAdModal] = useState<AdModalState | null>(null);
   const [sdkAdActive, setSdkAdActive] = useState(false);
   const [offlinePending, setOfflinePending] = useState<number | null>(null);
@@ -260,6 +271,23 @@ export default function App() {
     () => HEROES.find((h) => h.id === save.activeHero) || HEROES[0],
     [save.activeHero]
   );
+
+  const activeHeroTier = useMemo(
+    () => getHeroEvolutionTier(save, save.activeHero),
+    [save]
+  );
+
+  const prevEvolutionRef = useRef({ hero: save.activeHero, tier: activeHeroTier });
+  useEffect(() => {
+    const prev = prevEvolutionRef.current;
+    if (prev.hero === save.activeHero && activeHeroTier > prev.tier && screen === 'playing' && !isTrailerMode) {
+      canvasRef.current?.triggerEvolutionBurst();
+      soundEngine.playAchievement();
+      const tierName = HERO_TIER_LABELS[activeHeroTier][locale];
+      setToastTitle(`${activeHeroDef.name[locale]} · Tier ${activeHeroTier} (${tierName})!`);
+    }
+    prevEvolutionRef.current = { hero: save.activeHero, tier: activeHeroTier };
+  }, [save.activeHero, activeHeroTier, screen, isTrailerMode, activeHeroDef, locale]);
 
   // Derived RPG Combat Stats
   const stats = useMemo(() => {
@@ -416,11 +444,30 @@ export default function App() {
 
   const pendingEmblems = useMemo(() => calculatePendingEmblems(save), [save]);
 
-  // CrazyGames SDK init
+  const currentLeaderboardScore = useMemo(() => computeLeaderboardScore(save), [save]);
+
+  const buildRunMeta = useCallback(
+    (state: SaveState): ScoreRunMeta => ({
+      floor: state.maxFloor,
+      bossesSlain: state.bossesSlain,
+      raresSlain: state.raresSlain,
+      ascensions: state.ascensionCount,
+      heroId: state.activeHero,
+      raceId: state.activeRace,
+      playerName: portalPlayer?.name,
+    }),
+    [portalPlayer?.name]
+  );
+
+  // Portal SDK init (CrazyGames / BountyBoard / Y8 / Generic)
   useEffect(() => {
     let active = true;
+    const unsubPlayer = platformSDK.onPlayerChange?.((nextPlayer) => {
+      if (active) setPortalPlayer(nextPlayer);
+    });
     platformSDK.init().then(async () => {
       if (!active) return;
+      setPortalPlayer(platformSDK.getPlayer());
       const cloudRaw = await platformSDK.loadCloudData(SAVE_KEY);
       if (cloudRaw && active) {
         try {
@@ -436,8 +483,15 @@ export default function App() {
     });
     return () => {
       active = false;
+      unsubPlayer?.();
     };
   }, [isTrailerMode]);
+
+  // Sync progressive leaderboard score on milestones (floor, bosses, rares, ascensions)
+  useEffect(() => {
+    if (isTrailerMode || currentLeaderboardScore <= 0) return;
+    void platformSDK.submitScore(currentLeaderboardScore, buildRunMeta(save), false);
+  }, [currentLeaderboardScore, isTrailerMode, buildRunMeta, save]);
 
   // Offline Gold check on mount
   useEffect(() => {
@@ -478,7 +532,7 @@ export default function App() {
 
   // Buff & Skill cooldown tick (10Hz)
   useEffect(() => {
-    if (screen !== 'playing' || adModal || sdkAdActive || offlinePending || showHelp) return;
+    if (screen !== 'playing' || adModal || sdkAdActive || offlinePending || showHelp || showLeaderboard) return;
     const id = setInterval(() => {
       setDamage2xLeft((prev) => (prev > 0 ? Math.max(0, prev - 0.1) : 0));
       setCoinWardLeft((prev) => (prev > 0 ? Math.max(0, prev - 0.1) : 0));
@@ -496,7 +550,7 @@ export default function App() {
       }));
     }, 100);
     return () => clearInterval(id);
-  }, [screen, adModal, sdkAdActive, offlinePending, showHelp]);
+  }, [screen, adModal, sdkAdActive, offlinePending, showHelp, showLeaderboard]);
 
   // Fallback Ad modal countdown
   useEffect(() => {
@@ -543,6 +597,29 @@ export default function App() {
 
   const closeHelp = useCallback(() => {
     setShowHelp(false);
+    if (screen === 'playing') platformSDK.gameplayStart();
+  }, [screen]);
+
+  const refreshLeaderboard = useCallback(async () => {
+    setLeaderboardLoading(true);
+    try {
+      const current = saveRef.current;
+      const score = computeLeaderboardScore(current);
+      const data = await platformSDK.fetchLeaderboard(score, buildRunMeta(current));
+      setLeaderboardData(data);
+    } finally {
+      setLeaderboardLoading(false);
+    }
+  }, [buildRunMeta]);
+
+  const openLeaderboard = useCallback(() => {
+    setShowLeaderboard(true);
+    if (screen === 'playing') platformSDK.gameplayStop();
+    void refreshLeaderboard();
+  }, [screen, refreshLeaderboard]);
+
+  const closeLeaderboard = useCallback(() => {
+    setShowLeaderboard(false);
     if (screen === 'playing') platformSDK.gameplayStart();
   }, [screen]);
 
@@ -869,6 +946,10 @@ export default function App() {
 
   const triggerAscension = useCallback(() => {
     if (pendingEmblems <= 0) return;
+    const preScore = computeLeaderboardScore(saveRef.current);
+    if (preScore > 0) {
+      void platformSDK.submitScore(preScore, buildRunMeta(saveRef.current), true);
+    }
     soundEngine.playPrestige();
     platformSDK.happytime();
     canvasRef.current?.triggerShake(12);
@@ -902,7 +983,7 @@ export default function App() {
     setBossSecondWindLeft(0);
     setDockTab('upgrades');
     setToastTitle(`Ascended! +${pendingEmblems} Heroic Emblem${pendingEmblems > 1 ? 's' : ''}`);
-  }, [pendingEmblems]);
+  }, [pendingEmblems, buildRunMeta]);
 
   const startDamage2xAd = useCallback(() => {
     if (damage2xLeft > 0 || sdkAdActive) return;
@@ -1152,6 +1233,10 @@ export default function App() {
       setConfirmReset(true);
       return;
     }
+    const prevScore = computeLeaderboardScore(saveRef.current);
+    if (prevScore > 0) {
+      void platformSDK.submitScore(prevScore, buildRunMeta(saveRef.current), true);
+    }
     const fresh = createFreshSave();
     setSave(fresh);
     setDamage2xLeft(0);
@@ -1165,7 +1250,7 @@ export default function App() {
     canvasRef.current?.resetFloorWave(1);
     setScreen('title');
     platformSDK.gameplayStop();
-  }, [confirmReset]);
+  }, [confirmReset, buildRunMeta]);
 
   const cycleTab = (dir: -1 | 1) => {
     const idx = TAB_ORDER.findIndex((item) => item.id === dockTab);
@@ -1182,17 +1267,24 @@ export default function App() {
       if (e.repeat) return;
 
       if (screen === 'title') {
-        if (e.code === 'Enter' || e.code === 'Space') enterGame();
+        if (e.code === 'Escape' && showLeaderboard) {
+          closeLeaderboard();
+        } else if (e.code === 'Escape' && showHelp) {
+          closeHelp();
+        } else if (!showHelp && !showLeaderboard && (e.code === 'Enter' || e.code === 'Space')) {
+          enterGame();
+        }
         return;
       }
 
       if (e.code === 'Escape') {
-        if (showHelp) setShowHelp(false);
+        if (showLeaderboard) closeLeaderboard();
+        else if (showHelp) closeHelp();
         else togglePause();
         return;
       }
 
-      if (screen !== 'playing' || adModal || sdkAdActive || offlinePending || showHelp) return;
+      if (screen !== 'playing' || adModal || sdkAdActive || offlinePending || showHelp || showLeaderboard) return;
 
       if (e.code === 'Space') {
         canvasRef.current?.triggerPlayerAttack();
@@ -1206,7 +1298,19 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown, { passive: false });
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [screen, adModal, sdkAdActive, offlinePending, showHelp, enterGame, togglePause, castSkill]);
+  }, [
+    screen,
+    adModal,
+    sdkAdActive,
+    offlinePending,
+    showHelp,
+    showLeaderboard,
+    enterGame,
+    togglePause,
+    castSkill,
+    closeHelp,
+    closeLeaderboard,
+  ]);
 
   const bossFloor = isBossFloor(save.floor);
   const floorProgressPct = bossFloor
@@ -1230,11 +1334,12 @@ export default function App() {
       {/* 2D Pixel-Art Dungeon Stage */}
       <GameCanvas
         ref={canvasRef}
-        isPlaying={screen === 'playing' && !adModal && !sdkAdActive && !offlinePending && !showHelp}
+        isPlaying={screen === 'playing' && !adModal && !sdkAdActive && !offlinePending && !showHelp && !showLeaderboard}
         floor={save.floor}
         killsOnFloor={save.killsOnFloor}
         activeHero={save.activeHero}
         activeRace={save.activeRace}
+        heroEvolutionTier={activeHeroTier}
         attackStyle={activeHeroDef.attackStyle}
         autoSkills={activeHeroDef.autoSkills}
         heroProjectileColor={activeHeroDef.projectileColor}
@@ -1265,8 +1370,22 @@ export default function App() {
       {/* START GAME SCREEN (Sleek, Zero-Scroll Overlay over Live Animated Dungeon) */}
       {screen === 'title' && (
         <div className="fixed inset-0 z-30 flex flex-col items-center justify-center p-3 sm:p-5 bg-gradient-to-b from-[#090b10]/55 via-[#0b0e16]/40 to-[#090b10]/78">
-          {/* Top-right Audio & Language Controls */}
+          {/* Top-right Audio, Leaderboard & Language Controls */}
           <div className="absolute top-3 right-3 sm:top-4 sm:right-4 flex items-center gap-2">
+            {portalPlayer?.loggedIn && (
+              <div className="hidden md:flex pixel-card min-h-[40px] px-3 py-1.5 rounded-lg items-center gap-2 text-xs font-bold text-emerald-300">
+                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span className="truncate max-w-[120px]">{portalPlayer.name}</span>
+              </div>
+            )}
+            <button
+              onClick={openLeaderboard}
+              aria-label={t.leaderboardBtn}
+              className="pixel-card min-h-[40px] px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-bold text-amber-300 hover:brightness-115 cursor-pointer"
+            >
+              <Trophy className="w-4 h-4 text-amber-400" />
+              <span className="hidden sm:inline">{t.leaderboardBtn}</span>
+            </button>
             <button
               onClick={toggleMute}
               aria-label={muted ? 'Unmute audio' : 'Mute audio'}
@@ -1292,14 +1411,44 @@ export default function App() {
             {/* Compact Hero Party vs Dragon Preview Strip */}
             <div className="w-full rounded-xl bg-gradient-to-b from-[#171c2b] to-[#10131e] border border-[#2d344a] px-3 py-2 flex items-center justify-between gap-2 overflow-hidden">
               <div className="flex items-end gap-1.5 sm:gap-2">
-                <PixelSpriteThumb kind="hero" id="warrior" raceId={save.activeRace} size={38} />
-                <PixelSpriteThumb kind="hero" id="paladin" raceId={save.activeRace} size={38} />
-                <PixelSpriteThumb kind="hero" id="mage" raceId={save.activeRace} size={38} />
+                <PixelSpriteThumb
+                  kind="hero"
+                  id="warrior"
+                  raceId={save.activeRace}
+                  tier={hasSavedProgress ? getHeroEvolutionTier(save, 'warrior') : 2}
+                  size={38}
+                />
+                <PixelSpriteThumb
+                  kind="hero"
+                  id="paladin"
+                  raceId={save.activeRace}
+                  tier={hasSavedProgress ? getHeroEvolutionTier(save, 'paladin') : 2}
+                  size={38}
+                />
+                <PixelSpriteThumb
+                  kind="hero"
+                  id="mage"
+                  raceId={save.activeRace}
+                  tier={hasSavedProgress ? getHeroEvolutionTier(save, 'mage') : 3}
+                  size={38}
+                />
                 <div className="hidden sm:block">
-                  <PixelSpriteThumb kind="hero" id="shaman" raceId={save.activeRace} size={38} />
+                  <PixelSpriteThumb
+                    kind="hero"
+                    id="shaman"
+                    raceId={save.activeRace}
+                    tier={hasSavedProgress ? getHeroEvolutionTier(save, 'shaman') : 2}
+                    size={38}
+                  />
                 </div>
                 <div className="hidden sm:block">
-                  <PixelSpriteThumb kind="hero" id="druid" raceId={save.activeRace} size={38} />
+                  <PixelSpriteThumb
+                    kind="hero"
+                    id="druid"
+                    raceId={save.activeRace}
+                    tier={hasSavedProgress ? getHeroEvolutionTier(save, 'druid') : 3}
+                    size={42}
+                  />
                 </div>
               </div>
               <div className="font-display text-sm sm:text-base font-bold text-amber-400/90 px-1 shrink-0">
@@ -1328,7 +1477,13 @@ export default function App() {
             {hasSavedProgress ? (
               <div className="w-full pixel-card rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-left">
                 <div className="flex items-center gap-3">
-                  <PixelSpriteThumb kind="hero" id={save.activeHero} raceId={save.activeRace} size={38} />
+                  <PixelSpriteThumb
+                    kind="hero"
+                    id={save.activeHero}
+                    raceId={save.activeRace}
+                    tier={activeHeroTier}
+                    size={38}
+                  />
                   <div>
                     <div className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
                       <Lock className="w-3 h-3 text-amber-400" />
@@ -1545,7 +1700,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Top-Right of Arena: Settings & Help */}
+              {/* Top-Right of Arena: Settings, Leaderboard & Help */}
               <div className="pointer-events-auto flex flex-col gap-1.5 sm:gap-2 shrink-0">
                 <button
                   onClick={togglePause}
@@ -1553,6 +1708,14 @@ export default function App() {
                   className="pixel-card w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center hover:brightness-115 cursor-pointer"
                 >
                   <PixelIcon name="gear" size={isCompactArena ? 20 : 24} />
+                </button>
+                <button
+                  onClick={openLeaderboard}
+                  aria-label={t.leaderboardBtn}
+                  title={t.leaderboardBtn}
+                  className="pixel-card w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center hover:brightness-115 cursor-pointer text-amber-300"
+                >
+                  <Trophy className={isCompactArena ? 'w-4 h-4' : 'w-5 h-5'} />
                 </button>
                 <button
                   onClick={openHelp}
@@ -1995,7 +2158,8 @@ export default function App() {
                             kind="hero"
                             id={save.activeHero}
                             raceId={save.activeRace}
-                            size={34}
+                            tier={activeHeroTier}
+                            size={36}
                           />
                           <div className="min-w-0">
                             <div className="flex items-center gap-1 text-[11px] font-pixel font-bold text-slate-200 truncate">
@@ -2008,6 +2172,9 @@ export default function App() {
                                 {curRace.name[locale]}
                               </span>
                               <span className="text-slate-400">· {activeHeroDef.name[locale]}</span>
+                              <span className="text-amber-300 shrink-0">
+                                T{activeHeroTier} {HERO_TIER_LABELS[activeHeroTier][locale]}
+                              </span>
                               {isAffinity && (
                                 <span className="text-emerald-400 text-[10px]">★</span>
                               )}
@@ -2069,6 +2236,7 @@ export default function App() {
                       const unlocked = save.unlockedHeroes.includes(hero.id);
                       const isFighting = save.activeHero === hero.id;
                       const rank = getHeroRank(save, hero.id);
+                      const heroTier = getHeroEvolutionTier(save, hero.id);
                       const upgCost = getHeroUpgradeCost(hero, rank);
                       const unlockCost = getClassUnlockCost(hero, save.activeRace);
                       const switchCost = getClassSwitchCost(hero, save.floor, save.activeRace);
@@ -2094,6 +2262,21 @@ export default function App() {
                               -30%
                             </span>
                           )}
+                          {unlocked && (
+                            <span
+                              className={`absolute top-1 right-1 px-1 py-0.2 rounded border text-[8px] font-bold ${
+                                heroTier === 4
+                                  ? 'bg-amber-500/25 border-amber-400/70 text-amber-200'
+                                  : heroTier === 3
+                                  ? 'bg-violet-500/25 border-violet-400/70 text-violet-200'
+                                  : heroTier === 2
+                                  ? 'bg-sky-500/20 border-sky-400/60 text-sky-200'
+                                  : 'bg-slate-800/80 border-slate-600/60 text-slate-300'
+                              }`}
+                            >
+                              T{heroTier}
+                            </span>
+                          )}
                           {!unlocked && (
                             <div className="absolute top-1.5 right-1.5">
                               <PixelIcon name="lock" size={15} />
@@ -2105,7 +2288,8 @@ export default function App() {
                               kind="hero"
                               id={hero.id}
                               raceId={save.activeRace}
-                              size={46}
+                              tier={heroTier}
+                              size={48}
                             />
                           </div>
 
@@ -2519,6 +2703,170 @@ export default function App() {
             <button
               onClick={closeHelp}
               className="pixel-btn-gold w-full py-2.5 rounded-xl font-pixel text-base font-bold text-slate-950 cursor-pointer"
+            >
+              {t.close}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* LEADERBOARD MODAL (CrazyGames / BountyBoard / Y8 / Local Hall of Heroes) */}
+      {showLeaderboard && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/80 p-3 sm:p-4">
+          <div className="pixel-panel w-full max-w-md rounded-2xl p-4 sm:p-5 flex flex-col gap-3 max-h-[90dvh] overflow-hidden">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <Trophy className="w-6 h-6 text-amber-400 shrink-0" />
+                <div className="min-w-0">
+                  <h2 className="font-pixel text-xl sm:text-2xl font-bold text-amber-300 leading-none truncate">
+                    {t.leaderboardTitle}
+                  </h2>
+                  <div className="text-[11px] font-bold text-sky-300 uppercase tracking-wider mt-0.5">
+                    {platformSDK.portalId === 'bountyboard'
+                      ? 'BountyBoard Arcade'
+                      : platformSDK.portalId === 'crazygames'
+                      ? 'CrazyGames'
+                      : platformSDK.portalId === 'y8'
+                      ? 'Y8 Games'
+                      : 'Web Edition'}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={refreshLeaderboard}
+                disabled={leaderboardLoading}
+                className="pixel-card px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-200 hover:brightness-115 cursor-pointer disabled:opacity-60 shrink-0"
+              >
+                {leaderboardLoading ? '...' : t.leaderboardRefresh}
+              </button>
+            </div>
+
+            {/* Player Summary Card */}
+            <div className="pixel-card rounded-xl px-3 py-2.5 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <PixelSpriteThumb
+                  kind="hero"
+                  id={save.activeHero}
+                  raceId={save.activeRace}
+                  tier={activeHeroTier}
+                  size={36}
+                />
+                <div className="min-w-0">
+                  <div className="font-pixel text-sm font-bold text-white truncate">
+                    {portalPlayer?.name || activeRaceDef.name[locale]} · {activeHeroDef.name[locale]}
+                  </div>
+                  <div className="text-[11px] text-slate-300 font-mono-num">
+                    {t.leaderboardFloorCol} {save.maxFloor} · Bosses {save.bossesSlain}
+                  </div>
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
+                  {t.leaderboardScoreLabel}
+                </div>
+                <div className="font-pixel text-lg font-bold text-amber-300 font-mono-num">
+                  {currentLeaderboardScore.toLocaleString('en-US')}
+                </div>
+              </div>
+            </div>
+
+            {/* Portal Sync Banner */}
+            <div className="rounded-lg bg-slate-900/80 border border-slate-700/80 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-200">
+              <span>
+                {leaderboardData?.syncStatus === 'synced'
+                  ? t.leaderboardStatusSynced
+                  : leaderboardData?.syncStatus === 'guest'
+                  ? t.leaderboardStatusGuest
+                  : leaderboardData?.syncStatus === 'portal_ui'
+                  ? t.leaderboardStatusPortalUi
+                  : leaderboardData?.syncStatus === 'unconfigured'
+                  ? t.leaderboardStatusUnconfigured
+                  : t.leaderboardStatusLocal}
+              </span>
+              <div className="flex items-center gap-1.5">
+                {leaderboardData?.canSignIn && platformSDK.signIn && (
+                  <button
+                    onClick={() => {
+                      void platformSDK.signIn?.().then(() => refreshLeaderboard());
+                    }}
+                    className="pixel-btn-gold px-2.5 py-1 rounded text-[11px] font-bold text-slate-950 cursor-pointer"
+                  >
+                    {t.leaderboardSignIn}
+                  </button>
+                )}
+                {leaderboardData?.canOpenPortalModal && platformSDK.openPortalLeaderboard && (
+                  <button
+                    onClick={() => {
+                      void platformSDK.openPortalLeaderboard?.();
+                    }}
+                    className="pixel-btn-slate px-2.5 py-1 rounded text-[11px] font-bold text-sky-200 cursor-pointer"
+                  >
+                    {t.leaderboardOpenNative}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Ranked Entries */}
+            <div className="flex-1 overflow-y-auto custom-scroll flex flex-col gap-1.5 pr-1 min-h-[160px]">
+              {!leaderboardData || leaderboardData.entries.length === 0 ? (
+                <div className="pixel-card rounded-xl p-5 text-center text-xs text-slate-400">
+                  {t.leaderboardEmpty}
+                </div>
+              ) : (
+                leaderboardData.entries.map((entry) => (
+                  <div
+                    key={`${entry.source}-${entry.rank}-${entry.name}`}
+                    className={`rounded-xl px-3 py-2 flex items-center justify-between gap-2 border ${
+                      entry.isCurrentPlayer
+                        ? 'bg-amber-500/15 border-amber-400/60'
+                        : 'bg-[#171b28]/90 border-[#2b3347]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span
+                        className={`w-6 text-center font-pixel text-sm font-bold shrink-0 ${
+                          entry.rank === 1
+                            ? 'text-amber-300'
+                            : entry.rank === 2
+                            ? 'text-slate-200'
+                            : entry.rank === 3
+                            ? 'text-orange-400'
+                            : 'text-slate-400'
+                        }`}
+                      >
+                        #{entry.rank}
+                      </span>
+                      {entry.hero && (
+                        <PixelSpriteThumb
+                          kind="hero"
+                          id={entry.hero}
+                          raceId={entry.race || 'human'}
+                          size={24}
+                        />
+                      )}
+                      <div className="min-w-0">
+                        <div className="font-pixel text-xs sm:text-sm font-bold text-white truncate">
+                          {entry.name}
+                        </div>
+                        {typeof entry.floor === 'number' && (
+                          <div className="text-[10px] text-slate-400 font-mono-num">
+                            {t.leaderboardFloorCol} {entry.floor}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="font-pixel text-sm sm:text-base font-bold text-amber-300 font-mono-num shrink-0">
+                      {entry.score.toLocaleString('en-US')}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <button
+              onClick={closeLeaderboard}
+              className="pixel-btn-gold w-full py-2.5 rounded-xl font-pixel text-base font-bold text-slate-950 cursor-pointer shrink-0"
             >
               {t.close}
             </button>

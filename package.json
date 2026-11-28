@@ -7,8 +7,10 @@
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
     "build:crazygames": "VITE_PORTAL=crazygames vite build --outDir dist-cg",
+    "build:bountyboard": "VITE_PORTAL=bountyboard vite build --outDir dist-bb",
+    "build:y8": "VITE_PORTAL=y8 vite build --outDir dist-y8",
     "preview": "vite preview",
-    "clean": "rm -rf dist dist-cg server.js *.zip",
+    "clean": "rm -rf dist dist-cg dist-bb dist-y8 server.js *.zip",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

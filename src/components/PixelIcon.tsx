@@ -1,11 +1,12 @@
 import React, { useEffect, useRef } from 'react';
 import { getCoinSprite, getEnemySprite, getHeroSprite } from '../game/pixelSprites';
-import { AutoSkillVisual, ClassAttackStyle } from '../game/types';
+import { AutoSkillVisual, ClassAttackStyle, HeroEvolutionTier } from '../game/types';
 
 interface PixelSpriteThumbProps {
   kind: 'hero' | 'enemy' | 'coin';
   id?: string;
   raceId?: string;
+  tier?: HeroEvolutionTier;
   size?: number;
   className?: string;
 }
@@ -14,6 +15,7 @@ export const PixelSpriteThumb: React.FC<PixelSpriteThumbProps> = ({
   kind,
   id = 'warrior',
   raceId = 'human',
+  tier = 1,
   size = 44,
   className = '',
 }) => {
@@ -27,7 +29,7 @@ export const PixelSpriteThumb: React.FC<PixelSpriteThumbProps> = ({
         ? getCoinSprite()
         : kind === 'enemy'
         ? getEnemySprite(id)
-        : getHeroSprite(id, raceId);
+        : getHeroSprite(id, raceId, tier);
     canvas.width = sprite.width;
     canvas.height = sprite.height;
     const ctx = canvas.getContext('2d');
@@ -35,7 +37,7 @@ export const PixelSpriteThumb: React.FC<PixelSpriteThumbProps> = ({
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(sprite, 0, 0);
-  }, [kind, id, raceId]);
+  }, [kind, id, raceId, tier]);
 
   return (
     <canvas

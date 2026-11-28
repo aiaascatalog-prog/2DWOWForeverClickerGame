@@ -1,4 +1,14 @@
 import { soundEngine } from '../audio/synth';
+import {
+  LeaderboardFetchResult,
+  PortalAdapter,
+  PortalPlayerInfo,
+  RewardedAdCallbacks,
+  ScoreRunMeta,
+  buildLocalLeaderboardEntries,
+  safeStorageGet,
+  safeStorageSet,
+} from './types';
 
 interface CrazyGamesCallbacks {
   adStarted?: () => void;
@@ -25,13 +35,9 @@ interface CrazyGamesSDKv3 {
     systemInfo?: {
       countryCode?: string;
     };
+    getUser?: () => Promise<{ username?: string; profilePictureUrl?: string } | null>;
+    submitScore?: (payload: { encryptedScore: string; score: number }) => Promise<void> | void;
   };
-}
-
-export interface RewardedAdCallbacks {
-  onStart?: () => void;
-  onError?: (reason: string) => void;
-  onDone?: () => void;
 }
 
 declare global {
@@ -42,12 +48,47 @@ declare global {
   }
 }
 
-class PlatformSDK {
+async function encryptCrazyGamesScore(score: number, encryptionKeyBase64: string): Promise<string> {
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const algorithm: AesGcmParams = { name: 'AES-GCM', iv };
+  const binary = atob(encryptionKeyBase64);
+  const keyBytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    keyBytes[i] = binary.charCodeAt(i);
+  }
+  const cryptoKey = await window.crypto.subtle.importKey('raw', keyBytes, algorithm, false, [
+    'encrypt',
+  ]);
+  const dataBuffer = new TextEncoder().encode(score.toString());
+  const encryptedBuffer = await window.crypto.subtle.encrypt(algorithm, cryptoKey, dataBuffer);
+  const combined = new Uint8Array(iv.length + encryptedBuffer.byteLength);
+  combined.set(iv);
+  combined.set(new Uint8Array(encryptedBuffer), iv.length);
+
+  let out = '';
+  for (let i = 0; i < combined.length; i++) {
+    out += String.fromCharCode(combined[i]);
+  }
+  return btoa(out);
+}
+
+export class CrazyGamesAdapter implements PortalAdapter {
+  public readonly portalId = 'crazygames' as const;
+
   private sdkInitPromise: Promise<boolean> | null = null;
   private sdkReady = false;
   private isCrazyGamesEnv = false;
   private pendingGameplayState: 'start' | 'stop' | null = null;
   private adRequestInFlight = false;
+  private currentPlayer: PortalPlayerInfo | null = null;
+  private readonly leaderboardKey: string;
+  private lastSubmittedScore = 0;
+  private lastScoreSubmitAt = 0;
+
+  constructor() {
+    const env = import.meta.env as Record<string, string | undefined>;
+    this.leaderboardKey = (env.VITE_CG_LEADERBOARD_KEY || '').trim();
+  }
 
   private ensureSdkInit(): Promise<boolean> {
     if (this.sdkReady) return Promise.resolve(true);
@@ -60,7 +101,7 @@ class PlatformSDK {
     if (!this.sdkInitPromise) {
       this.sdkInitPromise = sdk
         .init()
-        .then(() => {
+        .then(async () => {
           const env = sdk.environment;
           if (env === 'disabled') {
             this.sdkReady = false;
@@ -77,6 +118,20 @@ class PlatformSDK {
             this.gameplayStop();
           }
           this.pendingGameplayState = null;
+
+          try {
+            const user = await sdk.user?.getUser?.();
+            if (user?.username) {
+              this.currentPlayer = {
+                name: user.username,
+                avatarUrl: user.profilePictureUrl || null,
+                loggedIn: true,
+              };
+            }
+          } catch {
+            // guest or user module unavailable
+          }
+
           return true;
         })
         .catch(() => {
@@ -101,6 +156,10 @@ class PlatformSDK {
 
   public isCrazyGames(): boolean {
     return this.isCrazyGamesEnv;
+  }
+
+  public getPlayer(): PortalPlayerInfo | null {
+    return this.currentPlayer;
   }
 
   public gameplayStart(): void {
@@ -137,7 +196,7 @@ class PlatformSDK {
   }
 
   public async saveCloudData(key: string, jsonValue: string): Promise<void> {
-    localStorage.setItem(key, jsonValue);
+    safeStorageSet(key, jsonValue);
     if (!this.sdkReady) return;
     try {
       await window.CrazyGames?.SDK?.data?.setItem(key, jsonValue);
@@ -155,7 +214,7 @@ class PlatformSDK {
         // fallback to localStorage
       }
     }
-    return localStorage.getItem(key);
+    return safeStorageGet(key);
   }
 
   public requestRewardedAd(
@@ -230,6 +289,51 @@ class PlatformSDK {
 
     onFallbackModal();
   }
+
+  public async submitScore(score: number, _meta: ScoreRunMeta, isRunEnd = false): Promise<void> {
+    if (!this.sdkReady || !this.leaderboardKey) return;
+    const submitFn = window.CrazyGames?.SDK?.user?.submitScore;
+    if (typeof submitFn !== 'function' || typeof window.crypto?.subtle?.encrypt !== 'function') {
+      return;
+    }
+
+    const cleanScore = Math.max(0, Math.trunc(score));
+    if (cleanScore <= 0) return;
+
+    const now = Date.now();
+    if (!isRunEnd && cleanScore <= this.lastSubmittedScore) return;
+    if (!isRunEnd && now - this.lastScoreSubmitAt < 8000) return;
+
+    this.lastScoreSubmitAt = now;
+    try {
+      const encryptedScore = await encryptCrazyGamesScore(cleanScore, this.leaderboardKey);
+      await submitFn({ encryptedScore, score: cleanScore });
+      this.lastSubmittedScore = Math.max(this.lastSubmittedScore, cleanScore);
+    } catch {
+      // ignore invalid key or transient network error
+    }
+  }
+
+  public async fetchLeaderboard(
+    currentScore: number,
+    meta: ScoreRunMeta
+  ): Promise<LeaderboardFetchResult> {
+    const runMeta = this.currentPlayer?.name
+      ? { ...meta, playerName: this.currentPlayer.name }
+      : meta;
+    const entries = buildLocalLeaderboardEntries('active_run', currentScore, runMeta);
+
+    return {
+      portal: 'crazygames',
+      entries,
+      syncStatus: !this.sdkReady
+        ? 'local_only'
+        : this.leaderboardKey
+        ? 'portal_ui'
+        : 'unconfigured',
+      lastSubmittedScore: Math.max(this.lastSubmittedScore, Math.trunc(currentScore)),
+    };
+  }
 }
 
 function extractAdErrorReason(error: unknown, errorData?: unknown): string {
@@ -244,5 +348,3 @@ function extractAdErrorReason(error: unknown, errorData?: unknown): string {
   }
   return 'unfilled';
 }
-
-export const platformSDK = new PlatformSDK();
